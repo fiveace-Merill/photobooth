@@ -18,3 +18,4 @@ Run `make help` for all commands.
 
 See `AGENTS.md` for the full layout and rules, `docs/` for design notes, and `docs/decisions/` for why things are the way they are.
 # photobooth
+# photobooth
