@@ -1,0 +1,19 @@
+# One block per domain package. Each reads the shared goose migrations as schema,
+# reads only its own queries.sql, and writes into its own store/ package.
+# Add a block when a package gets its first queries.sql.
+version: "2"
+sql:
+  - name: clients
+    engine: postgresql
+    schema: migrations
+    queries: internal/clients/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/clients/store
+        sql_package: pgx/v5
+        emit_json_tags: false
+
+  # - name: auth      -> internal/auth/queries.sql      -> internal/auth/store
+  # - name: tenant    -> internal/tenant/queries.sql    -> internal/tenant/store
+  # - name: shoots    -> internal/shoots/queries.sql    -> internal/shoots/store

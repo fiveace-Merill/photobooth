@@ -1,0 +1,106 @@
+/*
+ * Photobooth theme tokens. See docs/design-system.md for the reasoning.
+ *
+ * HOW TO USE
+ *   1. Create the app:       npx create-next-app@latest web
+ *   2. Init shadcn:          cd web && npx shadcn@latest init
+ *   3. In app/globals.css, replace the generated `:root { ... }` and `.dark { ... }`
+ *      blocks with the two blocks below, and add the `@theme inline` block
+ *      (or merge its two lines into the one shadcn generated).
+ *
+ * Components must use these tokens (bg-background, text-foreground, bg-volt, ...).
+ * Never hard-code hex values in components.
+ */
+
+/* Light: dashboard and marketing pages */
+:root {
+  --radius: 0.625rem;
+
+  --background: #f4f3f1;            /* paper */
+  --foreground: #111112;            /* ink */
+  --card: #fafaf8;
+  --card-foreground: #111112;
+  --popover: #fafaf8;
+  --popover-foreground: #111112;
+
+  --primary: #111112;               /* ink buttons in light mode */
+  --primary-foreground: #f4f3f1;
+  --secondary: #e8e7e3;
+  --secondary-foreground: #111112;
+  --muted: #e8e7e3;
+  --muted-foreground: #5e6056;      /* darkened stone, 5.8:1 on paper */
+  --accent: #e8e7e3;                /* subtle hover surface (shadcn uses this for menus) */
+  --accent-foreground: #111112;
+  --destructive: #b3261e;
+
+  --border: #d9d8d3;
+  --input: #d9d8d3;
+  --ring: #2d3126;                  /* deep green; lime would be invisible on paper */
+
+  /* Brand highlight. Always a FILL with ink text on top, never text on light. */
+  --volt: #d2ff00;
+  --volt-foreground: #111112;
+
+  --chart-1: #2d3126;
+  --chart-2: #7f8177;
+  --chart-3: #8fb300;
+  --chart-4: #c9c8c2;
+  --chart-5: #111112;
+
+  --sidebar: #fafaf8;
+  --sidebar-foreground: #111112;
+  --sidebar-primary: #111112;
+  --sidebar-primary-foreground: #f4f3f1;
+  --sidebar-accent: #e8e7e3;
+  --sidebar-accent-foreground: #111112;
+  --sidebar-border: #d9d8d3;
+  --sidebar-ring: #2d3126;
+}
+
+/* Dark: client gallery and delivery pages (photos read best on dark) */
+.dark {
+  --background: #111112;            /* ink */
+  --foreground: #f4f3f1;            /* paper */
+  --card: #191a17;
+  --card-foreground: #f4f3f1;
+  --popover: #191a17;
+  --popover-foreground: #f4f3f1;
+
+  --primary: #d2ff00;               /* volt buttons in dark mode */
+  --primary-foreground: #111112;
+  --secondary: #2d3126;             /* deep green */
+  --secondary-foreground: #f4f3f1;
+  --muted: #22241e;
+  --muted-foreground: #9a9c91;
+  --accent: #2d3126;
+  --accent-foreground: #f4f3f1;
+  --destructive: #ff6b5e;
+
+  --border: #2d3126;
+  --input: #2d3126;
+  --ring: #d2ff00;
+
+  --volt: #d2ff00;
+  --volt-foreground: #111112;
+
+  --chart-1: #d2ff00;
+  --chart-2: #7f8177;
+  --chart-3: #a8d000;
+  --chart-4: #f4f3f1;
+  --chart-5: #4a4f40;
+
+  --sidebar: #191a17;
+  --sidebar-foreground: #f4f3f1;
+  --sidebar-primary: #d2ff00;
+  --sidebar-primary-foreground: #111112;
+  --sidebar-accent: #2d3126;
+  --sidebar-accent-foreground: #f4f3f1;
+  --sidebar-border: #2d3126;
+  --sidebar-ring: #d2ff00;
+}
+
+/* Exposes `bg-volt`, `text-volt-foreground`, etc. to Tailwind v4. */
+@theme inline {
+  --color-volt: var(--volt);
+  --color-volt-foreground: var(--volt-foreground);
+}
