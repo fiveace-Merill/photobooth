@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -13,7 +14,7 @@ import (
 // otherwise the request continues without an authenticated photographer.
 //
 // Handlers that require auth should check PhotographerFromContext and return 401.
-func NewMiddleware(svc *Service) func(http.Handler) http.Handler {
+func NewMiddleware(svc *Service, cookieSecure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c, err := r.Cookie(SessionCookieName)
@@ -26,7 +27,7 @@ func NewMiddleware(svc *Service) func(http.Handler) http.Handler {
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					// Invalid/expired cookie: clear it so the browser stops sending it.
-					http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+					http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(0, 0)})
 					next.ServeHTTP(w, r)
 					return
 				}

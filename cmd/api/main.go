@@ -34,7 +34,7 @@ func main() {
 
 	authSvc := auth.NewService(authstore.New(pool))
 	authHandler := auth.NewHandler(authSvc, cfg.CookieSecure)
-	authMiddleware := auth.NewMiddleware(authSvc)
+	authMiddleware := auth.NewMiddleware(authSvc, cfg.CookieSecure)
 
 	mux := http.NewServeMux()
 

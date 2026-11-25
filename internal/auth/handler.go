@@ -31,6 +31,7 @@ func (h *Handler) Register(mux *http.ServeMux, _ func(http.Handler) http.Handler
 	mux.HandleFunc("POST /api/v1/auth/signup", h.handleSignup)
 	mux.HandleFunc("POST /api/v1/auth/login", h.handleLogin)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.handleLogout)
+	mux.Handle("GET /api/v1/auth/me", RequireAuth(http.HandlerFunc(h.handleMe)))
 }
 
 type signupRequest struct {
@@ -111,6 +112,15 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
+	photog, ok := PhotographerFromContext(r.Context())
+	if !ok {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toAuthResponse(photog))
 }
 
 func setSessionCookie(w http.ResponseWriter, rawToken string, expiresAt time.Time, secure bool) {

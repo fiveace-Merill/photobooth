@@ -19,7 +19,7 @@ func TestSignupLoginLogout(t *testing.T) {
 	h := auth.NewHandler(svc, false)
 
 	mux := http.NewServeMux()
-	h.Register(mux, auth.NewMiddleware(svc))
+	h.Register(mux, auth.NewMiddleware(svc, false))
 
 	// Signup happy path.
 	signupBody := map[string]string{
@@ -97,6 +97,54 @@ func TestSignupLoginLogout(t *testing.T) {
 	// presented in the request cookie. One session should remain.
 	if count != 1 {
 		t.Fatalf("sessions count = %d, want 1", count)
+	}
+}
+
+func TestMe(t *testing.T) {
+	tdb := testdb.Open(t)
+	svc := auth.NewService(store.New(tdb.Owner))
+	h := auth.NewHandler(svc, false)
+
+	mux := http.NewServeMux()
+	mw := auth.NewMiddleware(svc, false)
+	h.Register(mux, mw)
+	handler := mw(mux)
+
+	// Unauthenticated request should be rejected.
+	res := doJSON(t, handler, http.MethodGet, "/api/v1/auth/me", nil, nil)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated /me status = %d, want %d; body=%s", res.Code, http.StatusUnauthorized, res.Body.String())
+	}
+
+	// Signup to get a valid session cookie.
+	res = doJSON(t, handler, http.MethodPost, "/api/v1/auth/signup", map[string]string{
+		"email":         "me@example.com",
+		"password":      "super-secret-password",
+		"business_name": "Studio Me",
+		"slug":          "studio-me",
+	}, nil)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("signup status = %d, want %d; body=%s", res.Code, http.StatusCreated, res.Body.String())
+	}
+	sessionCookie := findCookie(res.Result().Cookies(), auth.SessionCookieName)
+	if sessionCookie == nil || sessionCookie.Value == "" {
+		t.Fatal("expected session cookie on signup")
+	}
+
+	// Authenticated request should return current photographer.
+	res = doJSON(t, handler, http.MethodGet, "/api/v1/auth/me", nil, []*http.Cookie{sessionCookie})
+	if res.Code != http.StatusOK {
+		t.Fatalf("authenticated /me status = %d, want %d; body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+	var me map[string]any
+	if err := json.Unmarshal(res.Body.Bytes(), &me); err != nil {
+		t.Fatalf("unmarshal /me response: %v", err)
+	}
+	if me["email"] != "me@example.com" {
+		t.Fatalf("me email = %v, want me@example.com", me["email"])
+	}
+	if me["business_name"] != "Studio Me" {
+		t.Fatalf("me business_name = %v, want Studio Me", me["business_name"])
 	}
 }
 
