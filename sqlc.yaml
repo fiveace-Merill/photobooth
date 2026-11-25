@@ -14,6 +14,16 @@ sql:
         sql_package: pgx/v5
         emit_json_tags: false
 
-  # - name: auth      -> internal/auth/queries.sql      -> internal/auth/store
+  - name: auth
+    engine: postgresql
+    schema: migrations
+    queries: internal/auth/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/auth/store
+        sql_package: pgx/v5
+        emit_json_tags: false
+
   # - name: tenant    -> internal/tenant/queries.sql    -> internal/tenant/store
   # - name: shoots    -> internal/shoots/queries.sql    -> internal/shoots/store

@@ -11,6 +11,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createClient = `-- name: CreateClient :one
+INSERT INTO clients (photographer_id, name, phone, email, notes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, photographer_id, name, phone, email, notes, created_at, updated_at
+`
+
+type CreateClientParams struct {
+	PhotographerID pgtype.UUID
+	Name           string
+	Phone          pgtype.Text
+	Email          pgtype.Text
+	Notes          pgtype.Text
+}
+
+func (q *Queries) CreateClient(ctx context.Context, arg CreateClientParams) (Client, error) {
+	row := q.db.QueryRow(ctx, createClient,
+		arg.PhotographerID,
+		arg.Name,
+		arg.Phone,
+		arg.Email,
+		arg.Notes,
+	)
+	var i Client
+	err := row.Scan(
+		&i.ID,
+		&i.PhotographerID,
+		&i.Name,
+		&i.Phone,
+		&i.Email,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getClient = `-- name: GetClient :one
 SELECT id, photographer_id, name, phone, email, notes, created_at, updated_at
 FROM clients
