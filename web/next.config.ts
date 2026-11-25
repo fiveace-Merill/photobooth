@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
+const apiOrigin = process.env.API_ORIGIN ?? "http://localhost:8080";
+
 const nextConfig: NextConfig = {
-  /* config options here */
   experimental: {
     agentFeedback: true,
   },
@@ -14,6 +15,18 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  rewrites() {
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `${apiOrigin}/api/v1/:path*`,
+      },
+      {
+        source: "/healthz",
+        destination: `${apiOrigin}/healthz`,
+      },
+    ];
   },
 };
 
