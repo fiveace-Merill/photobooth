@@ -9,6 +9,10 @@ import { Toaster } from "@/components/ui/sonner";
 // a full page load, but it keeps portal theming correct and isolated.
 export const metadata: Metadata = {
   title: "Photo delivery",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function ClientRootLayout({

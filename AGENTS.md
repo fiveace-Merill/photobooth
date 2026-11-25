@@ -2,6 +2,8 @@
 
 Read fully before changing code. When prose and code/config disagree, trust the executable source.
 
+- The client delivery page is built against the DeliveryApi interface in web/lib/api/client.ts, currently implemented by mock.ts. The Go API must return data matching web/lib/api/types.ts. Changing that contract means changing both sides.
+
 ## Product & current state
 Photobooth delivers photos for Kenyan photographers: photographers are paying tenants (email/password); their clients never sign up — they open magic links, view watermarked previews, approve, pay with M-PESA, then originals unlock. Revenue is commission per paid delivery plus optional `plans` (placeholder values in the DB, expected to change).
 
@@ -57,7 +59,7 @@ make check                    # gofmt -w + go vet + go test ./...
 Tests live next to code; table-driven where useful. Must-have coverage: tenant isolation, ledger/commission, M-PESA callback idempotency, magic-link validation, unlock-on-payment. DB tests use real Postgres via `internal/platform/testdb`, not mocks. Fix the code or explain why a test is wrong — never weaken assertions.
 
 ## Frontend (web/ not scaffolded)
-See `web/README.md` for scaffold commands. Read `docs/design-system.md` before any UI; tokens live in `web/theme.css` (Tailwind v4 `@theme inline`) — use tokens, never hex in components. Light theme for dashboard/marketing; add the `dark` class for client gallery/delivery. Volt is a fill with ink text on light, never text on light, and is used sparingly. Client pages are mobile-first and slow-data friendly. `docs/prototypes/client-delivery.html` is the reference for flow, states and copy — port it with Shadcn and real API calls. Only the palette is borrowed from landonorris.com; no images, logos, fonts or copy. Browser code sees `NEXT_PUBLIC_*` only.
+See `web/README.md` for scaffold commands. Read `docs/design-system.md` before any UI; tokens live in `web/theme.css` (Tailwind v4 `@theme inline`) — use tokens, never hex in components. Light theme for dashboard/marketing; add the `dark` class for client gallery/delivery. Volt is a fill with ink text on light, never text on light, and is used sparingly. Client pages are mobile-first and slow-data friendly. `docs/prototypes/client-delivery.html` is the reference for flow, states and copy — port it with Shadcn and real API calls. Only the palette is borrowed from landonorris.com; no images, logos, fonts or copy. Marketing copy lives in `web/lib/content/` and placeholder content is tracked in `docs/PLACEHOLDERS.md`. Browser code sees `NEXT_PUBLIC_*` only.
 
 ## Working style
 Sole developer is learning Go: prefer simple readable code, explain non-obvious code and Go concepts, comment the why. Work in small vertical slices (migration → queries → handler → test → minimal UI); plan briefly before non-trivial work. Ask rather than guess on payments, permissions or deletion; payment/ledger code is reviewed line by line, so flag assumptions. No unrelated refactors. New config values go in `.env.example`; new conventions go in this file.

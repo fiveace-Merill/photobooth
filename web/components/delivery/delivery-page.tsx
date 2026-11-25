@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import type { Delivery } from "@/lib/api/types";
 import { deliveryApi } from "@/lib/api";
@@ -113,7 +114,11 @@ export function DeliveryPage({ delivery: initialDelivery, token }: Props) {
           </details>
         </main>
 
-        <footer className="py-8 text-sm text-muted-foreground">Delivered with Photobooth</footer>
+        <footer className="py-8 text-sm text-muted-foreground">
+          <Link href="/" className="rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Delivered with Photobooth
+          </Link>
+        </footer>
       </div>
 
       <ActionBar
