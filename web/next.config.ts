@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const apiOrigin = process.env.API_ORIGIN ?? "http://localhost:8080";
+const apiOrigin = process.env.API_URL ?? process.env.API_ORIGIN ?? "http://localhost:8080";
 
 const nextConfig: NextConfig = {
   experimental: {

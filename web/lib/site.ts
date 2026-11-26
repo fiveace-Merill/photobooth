@@ -4,6 +4,7 @@ export const site = {
   contactEmail: "hello@photobooth.example",
   whatsappNumber: "+254700000000",
   whatsappDisplay: "+254 700 000 000",
+  studioDomain: "photobooth.example",
   // PLACEHOLDER: set to the real production origin before launch.
   url: "https://photobooth.example",
 } as const;

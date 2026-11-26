@@ -2,26 +2,51 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { login } from "@/lib/auth/client";
+import { Label } from "@/components/ui/label";
+import { login, me } from "@/lib/auth/client";
+import { mapAuthError, validateEmail } from "@/lib/validation/auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    me().then((result) => {
+      if (result.ok) {
+        router.replace("/dashboard");
+        router.refresh();
+      }
+    });
+  }, [router]);
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setFieldError(null);
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.ok) {
+      setFieldError(emailValidation.message);
+      document.getElementById("email")?.focus();
+      return;
+    }
+    if (!password) {
+      setFieldError("Enter your password.");
+      document.getElementById("password")?.focus();
+      return;
+    }
+
     setLoading(true);
-    const result = await login({ email, password });
+    const result = await login({ email: email.trim(), password });
     setLoading(false);
     if (!result.ok) {
-      setError(result.error);
+      setError(mapAuthError(result));
       return;
     }
     router.push("/dashboard");
@@ -29,16 +54,14 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
+    <main className="mx-auto w-full max-w-md">
       <p className="text-sm font-medium text-muted-foreground">Photobooth</p>
       <h1 className="mt-3 text-4xl font-semibold tracking-tight">Log in</h1>
-      <p className="mt-3 text-muted-foreground">
-        Access your dashboard and manage your shoots.
-      </p>
+      <p className="mt-3 text-muted-foreground">Access your dashboard and manage your shoots.</p>
 
-      <form className="mt-8 space-y-4" onSubmit={onSubmit}>
+      <form className="mt-8 space-y-5" onSubmit={onSubmit} noValidate>
         <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="email">Email</label>
+          <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
@@ -46,11 +69,18 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={!!fieldError}
+            aria-describedby={fieldError ? "email-error" : undefined}
             className="min-h-11"
           />
+          {fieldError ? (
+            <p id="email-error" className="text-sm text-destructive" role="status">
+              {fieldError}
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="password">Password</label>
+          <Label htmlFor="password">Password</Label>
           <Input
             id="password"
             type="password"

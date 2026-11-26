@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import type { Photographer } from "./types";
 
-const apiOrigin = process.env.API_ORIGIN ?? "http://localhost:8080";
+const apiOrigin = process.env.API_URL ?? process.env.API_ORIGIN ?? "http://localhost:8080";
 
 export async function getCurrentPhotographer(): Promise<Photographer | null> {
   const cookieStore = await cookies();

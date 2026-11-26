@@ -30,6 +30,12 @@ export function MarketingHeader() {
             </Link>
           ))}
           <Link
+            href="/login"
+            className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Log in
+          </Link>
+          <Link
             href="#early-access"
             className="ml-2 inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >

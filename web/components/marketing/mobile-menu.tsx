@@ -18,6 +18,7 @@ const links = [
   { label: "Pricing", href: "#pricing" },
   { label: "FAQ", href: "#faq" },
   { label: "Live demo", href: DEMO_PATH },
+  { label: "Log in", href: "/login" },
 ];
 
 export function MobileMenu() {
