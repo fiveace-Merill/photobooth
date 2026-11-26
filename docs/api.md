@@ -102,6 +102,39 @@ Shoot shape:
 }
 ```
 
+## Photos (photographer)
+
+All endpoints require session auth. Any shoot/photo not owned by the session photographer returns `404 not_found`. Never expose original URLs/keys before unlock; storage keys contain no user text.
+
+### POST /api/v1/shoots/{shootId}/photos/uploads
+Body: `{filename, contentType, sizeBytes}`. Allowed types: `image/jpeg,image/png,image/webp`. Size `1..MAX_PHOTO_BYTES`. Reserves quota atomically and initiates multipart upload.
+
+Response `201`:
+```json
+{ "photoId":"uuid","shootId":"uuid","partSizeBytes":10485760,"partCount":3,"uploadParts":[{"partNumber":1,"url":"...","expiresAt":"RFC3339"}],"status":"uploading" }
+```
+
+Errors: `415 unsupported_type`, `413 file_too_large`, `409 quota_exceeded`, `409 too_many_photos`, `409 shoot_not_uploadable`.
+
+### POST /api/v1/shoots/{shootId}/photos/{photoId}/uploads/parts
+Body: `{partNumbers:[4,5,...]}` (max 20). Returns presigned upload part URLs.
+
+### POST /api/v1/shoots/{shootId}/photos/{photoId}/complete
+Body: `{parts:[{"partNumber":1,"etag":"..."}]}`. Completes multipart, verifies HEAD size equals declared size; mismatch deletes object, releases quota, marks failed `422 size_mismatch`. On success marks `processing` and enqueues `process_photo` in same River transaction.
+
+### GET /api/v1/shoots/{shootId}/photos?limit=&offset=
+Response `200`:
+```json
+{ "items":[Photo],"totals":{"count":0,"bytes":0},"quota":{"usedBytes":0,"quotaBytes":0} }
+```
+Photo includes `thumbUrl` only when ready; `thumbUrl` is a short-lived presigned GET. No original URL/key.
+
+### POST /api/v1/shoots/{shootId}/photos/{photoId}/retry
+Retries failed photo processing. Only `failed` photos: `409 invalid_photo_state`.
+
+### DELETE /api/v1/shoots/{shootId}/photos/{photoId}
+Aborts upload if uploading; deletes DB row and releases quota exactly once; best-effort deletes objects. Response `204`.
+
 ## Stable error codes
 
 | Code | Status | Meaning |
@@ -119,3 +152,10 @@ Shoot shape:
 | `invalid_origin` | 403 | Cross-site Origin rejected |
 | `signup_closed` | 403 | Public signup disabled |
 | `internal` | 500 | Unexpected server error |
+| `unsupported_type` | 415 | Photo content type not jpeg/png/webp |
+| `file_too_large` | 413 | Photo exceeds MAX_PHOTO_BYTES |
+| `quota_exceeded` | 409 | Photographer storage quota would be exceeded |
+| `too_many_photos` | 409 | Shoot exceeds MAX_PHOTOS_PER_SHOOT |
+| `shoot_not_uploadable` | 409 | Shoot cannot accept uploads (e.g. expired) |
+| `invalid_photo_state` | 409 | Photo state does not allow operation |
+| `size_mismatch` | 422 | Completed object size differs from declared size |

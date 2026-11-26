@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
 )
 
 var (
@@ -28,9 +29,14 @@ type ClientLookup interface {
 	NamesByIDs(ctx context.Context, photographerID pgtype.UUID, ids []pgtype.UUID) (map[string]string, error)
 }
 
+type ObjectCleanup interface {
+	EnqueueDeleteObjects(ctx context.Context, keys []string) error
+}
+
 type Service struct {
 	pool    *pgxpool.Pool
 	clients ClientLookup
+	river   *river.Client[pgx.Tx]
 	now     func() time.Time
 	loc     *time.Location
 }
@@ -41,6 +47,11 @@ func NewService(pool *pgxpool.Pool, clients ClientLookup) (*Service, error) {
 		return nil, fmt.Errorf("load Nairobi location: %w", err)
 	}
 	return &Service{pool: pool, clients: clients, now: time.Now, loc: loc}, nil
+}
+
+func (s *Service) WithRiver(client *river.Client[pgx.Tx]) *Service {
+	s.river = client
+	return s
 }
 
 func (s *Service) WithNow(now func() time.Time) *Service {
@@ -220,7 +231,8 @@ func (s *Service) SetStatus(ctx context.Context, photographerID, id pgtype.UUID,
 }
 
 func (s *Service) Delete(ctx context.Context, photographerID, id pgtype.UUID) error {
-	return database.WithTenant(ctx, s.pool, photographerID, func(tx pgx.Tx) error {
+	var keys []string
+	err := database.WithTenant(ctx, s.pool, photographerID, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		cur, err := q.GetShoot(ctx, store.GetShootParams{PhotographerID: photographerID, ID: id})
 		if err != nil {
@@ -232,6 +244,21 @@ func (s *Service) Delete(ctx context.Context, photographerID, id pgtype.UUID) er
 		if cur.Status != "shot" && cur.Status != "editing" && cur.Status != "ready" {
 			return ErrNotDeletable
 		}
+		rows, err := q.ListPhotoKeysByShoot(ctx, store.ListPhotoKeysByShootParams{PhotographerID: photographerID, ShootID: id})
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if r.OriginalKey != "" {
+				keys = append(keys, r.OriginalKey)
+			}
+			if r.PreviewKey.Valid {
+				keys = append(keys, r.PreviewKey.String)
+			}
+			if r.ThumbKey.Valid {
+				keys = append(keys, r.ThumbKey.String)
+			}
+		}
 		_, err = q.DeleteShoot(ctx, store.DeleteShootParams{PhotographerID: photographerID, ID: id})
 		if err != nil {
 			var pgErr *pgconn.PgError
@@ -242,7 +269,21 @@ func (s *Service) Delete(ctx context.Context, photographerID, id pgtype.UUID) er
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if len(keys) > 0 && s.river != nil {
+		// Best-effort cleanup after DB deletion has committed.
+		_, _ = s.river.Insert(ctx, photosDeleteObjectsArgs{Keys: keys}, nil)
+	}
+	return nil
 }
+
+type photosDeleteObjectsArgs struct {
+	Keys []string `json:"keys"`
+}
+
+func (photosDeleteObjectsArgs) Kind() string { return "delete_objects" }
 
 func (s *Service) List(ctx context.Context, photographerID pgtype.UUID, f ListFilter) (ListResult, error) {
 	limit, offset := normalizePage(f.Limit, f.Offset)
