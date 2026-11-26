@@ -23,6 +23,7 @@ export function GalleryGrid({ photos, unlocked, onOpen }: Props) {
           total={photos.length}
           unlocked={unlocked}
           onOpen={onOpen}
+          priority={i === 0}
         />
       ))}
     </ul>

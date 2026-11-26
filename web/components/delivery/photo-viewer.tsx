@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -56,13 +57,12 @@ export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext }
             style={style}
           >
             {current?.previewUrl ? (
-              // Keep next/image swap in PhotoTile/place when real previews exist.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={current.previewUrl}
                 alt=""
                 width={current.width}
                 height={current.height}
+                sizes="(min-width: 920px) 920px, 96vw"
                 className="h-full w-full object-cover"
               />
             ) : null}
@@ -71,6 +71,8 @@ export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext }
               className="pointer-events-none absolute inset-0 transition-opacity duration-[800ms] ease-out data-[gone=true]:opacity-0 motion-reduce:transition-none"
               data-gone={unlocked ? "true" : "false"}
               style={{
+                // In production the watermark is baked into the preview file on the server.
+                // This overlay is only a visual stand-in for the prototype/mock.
                 backgroundImage:
                   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='120'%3E%3Ctext x='85' y='66' text-anchor='middle' transform='rotate(-24 85 60)' font-family='sans-serif' font-size='17' font-weight='700' fill='white' fill-opacity='.4'%3EPREVIEW%3C/text%3E%3C/svg%3E\")",
               }}

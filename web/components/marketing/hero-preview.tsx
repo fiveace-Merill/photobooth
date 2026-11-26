@@ -1,10 +1,11 @@
 import { formatMoney } from "@/lib/money";
+import { PhotoFrame } from "@/components/delivery/photo-tile";
 
 const photos = [
-  { id: 1, className: "aspect-[4/5] bg-[linear-gradient(160deg,#2d3126,#111112)]" },
-  { id: 2, className: "aspect-[3/4] bg-[linear-gradient(160deg,#7f8177,#2d3126)]" },
-  { id: 3, className: "aspect-[4/3] bg-[linear-gradient(160deg,#3d4332,#1a1b17)]" },
-  { id: 4, className: "aspect-[3/4] bg-[linear-gradient(160deg,#a3a59b,#3a3f31)]" },
+  { id: "hero-1", width: 800, height: 1200, previewUrl: "/demo/previews/aleksandra-sapozhnikova.jpg" },
+  { id: "hero-2", width: 1200, height: 801, previewUrl: "/demo/previews/bryan-heng.jpg" },
+  { id: "hero-3", width: 750, height: 1200, previewUrl: "/demo/previews/eren-yildiz.jpg" },
+  { id: "hero-4", width: 1200, height: 800, previewUrl: "/demo/previews/modern-dairy-portraits.jpg" },
 ];
 
 export function HeroPreview() {
@@ -22,8 +23,18 @@ export function HeroPreview() {
             Photos unlocked
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            {photos.map((photo) => (
-              <div key={photo.id} className={`rounded-lg ${photo.className}`} />
+            {photos.map((photo, index) => (
+              <PhotoFrame
+                key={photo.id}
+                photo={photo}
+                index={index}
+                total={photos.length}
+                unlocked={true}
+                priority={index === 0}
+                interactive={false}
+                sizes="(min-width: 1024px) 13vw, (min-width: 640px) 20vw, 40vw"
+                className="relative w-full overflow-hidden rounded-lg [aspect-ratio:var(--r)]"
+              />
             ))}
           </div>
           <div className="mt-4 rounded-xl border border-border bg-card p-3">

@@ -11,3 +11,4 @@ This file tracks placeholder content that must be replaced before a public launc
 | Placeholder plan/pricing values | `web/lib/content/plans.ts`, `migrations/00001_tenants_and_auth.sql` | Survey-backed pricing/limits | Amounts are minor units/bps; DB seeds and UI content must stay aligned. |
 | Draft privacy policy text | `web/app/(marketing)/privacy/page.tsx` | Legally reviewed privacy policy | Page is marked DRAFT pending legal review. |
 | Demo delivery links/content | `web/lib/site.ts` (`DEMO_PATH`), `web/lib/api/mock.ts` | Real gallery links and API data | Demo route `/g/demo` is intentional for marketing; keep `noindex` on client route group. |
+| Temporary stock/demo images | `web/public/demo/`, `web/public/images/`, `docs/image-credits.md` | Licensed/owned production images with confirmed credits | Stock Unsplash images are temporary; previews generated in `web/public/demo/previews/`; originals used only by unlocked mock data. |

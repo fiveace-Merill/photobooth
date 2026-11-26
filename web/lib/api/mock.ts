@@ -3,6 +3,7 @@ import type {
   Delivery,
   PaymentStatus,
   PaymentStatusResult,
+  PreviewPhoto,
   StartPaymentResult,
   UnlockedPhoto,
 } from "./types";
@@ -17,18 +18,27 @@ type MockPayment = {
 
 const payments = new Map<string, MockPayment>();
 
-const photos = Array.from({ length: 12 }, (_, i) => {
-  const ratios = [0.75, 1.33, 1, 0.67, 1.5, 0.75, 1, 1.33, 0.67, 0.75, 1.5, 1];
-  const r = ratios[i] ?? 1;
-  const width = 1200;
-  const height = Math.round(width / r);
-  return {
+const demoFiles = [
+  { file: "aleksandra-sapozhnikova.jpg", width: 800, height: 1200, previewBytes: 43952, originalBytes: 1803518 },
+  { file: "bryan-heng.jpg", width: 1200, height: 801, previewBytes: 49880, originalBytes: 2406630 },
+  { file: "eren-yildiz.jpg", width: 750, height: 1200, previewBytes: 30338, originalBytes: 1250930 },
+  { file: "modern-dairy-portraits.jpg", width: 1200, height: 800, previewBytes: 119589, originalBytes: 8084825 },
+  { file: "samuel-boyer.jpg", width: 1200, height: 800, previewBytes: 100698, originalBytes: 4173168 },
+  { file: "sarmat-batagov.jpg", width: 960, height: 1200, previewBytes: 101339, originalBytes: 1883144 },
+  { file: "vaclav-pechar-lakeside.jpg", width: 1200, height: 674, previewBytes: 72300, originalBytes: 3085981 },
+  { file: "vaclav-pechar-coast.jpg", width: 800, height: 1200, previewBytes: 79638, originalBytes: 3242975 },
+] as const;
+
+function makePreviewPhotos(): PreviewPhoto[] {
+  // Even in mock data, preview and original are different files. previewUrl points
+  // to a downscaled preview; PreviewDelivery never contains original/download URLs.
+  return demoFiles.map((file, i) => ({
     id: `photo-${i + 1}`,
-    width,
-    height,
-    previewUrl: null,
-  };
-});
+    width: file.width,
+    height: file.height,
+    previewUrl: `/demo/previews/${file.file}`,
+  }));
+}
 
 function baseDelivery() {
   return {
@@ -38,15 +48,22 @@ function baseDelivery() {
     priceMinor: 300000,
     currency: "KES" as const,
     expiresAt: "22 December 2026",
-    photos,
+    photos: makePreviewPhotos(),
   };
 }
 
 function makeUnlockedPhotos(): UnlockedPhoto[] {
-  return photos.map((p) => ({
-    ...p,
-    originalUrl: `/mock/originals/${p.id}.jpg`,
+  return demoFiles.map((file, i) => ({
+    id: `photo-${i + 1}`,
+    width: file.width,
+    height: file.height,
+    previewUrl: `/demo/previews/${file.file}`,
+    originalUrl: `/demo/${file.file}`,
   }));
+}
+
+export function totalOriginalBytes(): number {
+  return demoFiles.reduce((sum, f) => sum + f.originalBytes, 0);
 }
 
 export class MockDeliveryApi implements DeliveryApi {
@@ -59,7 +76,7 @@ export class MockDeliveryApi implements DeliveryApi {
         status: "unlocked",
         ...baseDelivery(),
         downloadAllUrl: "/mock/downloads/demo-paid.zip",
-        totalOriginalBytes: 96 * 1024 * 1024,
+        totalOriginalBytes: totalOriginalBytes(),
         photos: makeUnlockedPhotos(),
       };
     }
