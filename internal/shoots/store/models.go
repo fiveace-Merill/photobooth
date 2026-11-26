@@ -97,6 +97,11 @@ type Photo struct {
 	Status         string
 	DeletedAt      pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
+	Error          pgtype.Text
+	ProcessedAt    pgtype.Timestamptz
+	SortKey        int32
+	UpdatedAt      pgtype.Timestamptz
+	UploadID       pgtype.Text
 }
 
 type Photographer struct {
@@ -144,4 +149,14 @@ type Shoot struct {
 	DeliveredAt         pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
+}
+
+type ShootEvent struct {
+	ID             pgtype.UUID
+	PhotographerID pgtype.UUID
+	ShootID        pgtype.UUID
+	PhotoID        pgtype.UUID
+	Kind           string
+	Payload        []byte
+	CreatedAt      pgtype.Timestamptz
 }

@@ -36,4 +36,15 @@ sql:
         sql_package: pgx/v5
         emit_json_tags: false
 
+  - name: photos
+    engine: postgresql
+    schema: migrations
+    queries: internal/photos/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/photos/store
+        sql_package: pgx/v5
+        emit_json_tags: false
+
   # - name: tenant    -> internal/tenant/queries.sql    -> internal/tenant/store

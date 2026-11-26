@@ -151,6 +151,43 @@ func (q *Queries) GetShoot(ctx context.Context, arg GetShootParams) (Shoot, erro
 	return i, err
 }
 
+const listPhotoKeysByShoot = `-- name: ListPhotoKeysByShoot :many
+SELECT original_key, preview_key, thumb_key
+FROM photos
+WHERE photographer_id = $1 AND shoot_id = $2
+`
+
+type ListPhotoKeysByShootParams struct {
+	PhotographerID pgtype.UUID
+	ShootID        pgtype.UUID
+}
+
+type ListPhotoKeysByShootRow struct {
+	OriginalKey string
+	PreviewKey  pgtype.Text
+	ThumbKey    pgtype.Text
+}
+
+func (q *Queries) ListPhotoKeysByShoot(ctx context.Context, arg ListPhotoKeysByShootParams) ([]ListPhotoKeysByShootRow, error) {
+	rows, err := q.db.Query(ctx, listPhotoKeysByShoot, arg.PhotographerID, arg.ShootID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPhotoKeysByShootRow
+	for rows.Next() {
+		var i ListPhotoKeysByShootRow
+		if err := rows.Scan(&i.OriginalKey, &i.PreviewKey, &i.ThumbKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listShootsByCreated = `-- name: ListShootsByCreated :many
 SELECT id, photographer_id, client_id, title, shoot_date, status, due_date, price_minor, currency, originals_unlocked_at, delivered_at, created_at, updated_at
 FROM shoots

@@ -97,3 +97,8 @@ SELECT
   COUNT(*) FILTER (WHERE due_date < $2::date AND status IN ('shot','editing','ready'))::bigint AS overdue
 FROM shoots
 WHERE photographer_id = $1;
+
+-- name: ListPhotoKeysByShoot :many
+SELECT original_key, preview_key, thumb_key
+FROM photos
+WHERE photographer_id = $1 AND shoot_id = $2;

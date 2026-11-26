@@ -35,3 +35,10 @@ Seeded in `plans`: Free = 0/month, 8% commission, 5 GB, 30 days. Pro = KES 1,000
 ## Not designed yet
 
 Notifications log, reviews/testimonials, expiry job bookkeeping, subscription billing for photographers. Design each in its own slice.
+
+## Photos / storage (slice 3a)
+
+- `photos` gained `error`, `processed_at`, `sort_key`, `updated_at`, `upload_id` in 00005. Originals live in R2; previews/thumbs are generated derivatives. Original keys/URLs must never be exposed to clients before unlock.
+- Object keys are ID-only: `p/{photographerId}/{shootId}/{photoId}/{original|preview.jpg|thumb.jpg}`. Never include user text.
+- Upload flow reserves quota atomically (`photographers.storage_used_bytes` checked against plan quota in one UPDATE). Completion verifies object HEAD size equals declared size; mismatch deletes object, releases quota, marks photo failed `size_mismatch`.
+- `shoot_events` is an internal audit log (RLS same tenant policy) for upload/processing/delete events.
