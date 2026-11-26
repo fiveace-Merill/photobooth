@@ -28,18 +28,21 @@ const (
 var (
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrEmailTaken         = errors.New("email already in use")
+	ErrSlugTaken          = errors.New("slug already in use")
 	ErrInvalidInput       = errors.New("invalid input")
+	ErrSignupClosed       = errors.New("signups are invite-only right now")
 )
 
 // Service contains auth business logic. It depends on sqlc-generated queries,
 // not on HTTP types, so it can be tested and reused without a web server.
 type Service struct {
-	q *store.Queries
+	q             *store.Queries
+	signupEnabled bool
 }
 
 // NewService constructs an auth Service.
-func NewService(q *store.Queries) *Service {
-	return &Service{q: q}
+func NewService(q *store.Queries, signupEnabled bool) *Service {
+	return &Service{q: q, signupEnabled: signupEnabled}
 }
 
 // SignupInput is the data required to create a photographer account.
@@ -60,6 +63,10 @@ type SessionResult struct {
 // Signup creates a photographer, hashes their password, and creates a session.
 // It returns the created photographer and session token data.
 func (s *Service) Signup(ctx context.Context, in SignupInput) (store.Photographer, SessionResult, error) {
+	if !s.signupEnabled {
+		return store.Photographer{}, SessionResult{}, ErrSignupClosed
+	}
+
 	in.Email = normalizeEmail(in.Email)
 	in.BusinessName = strings.TrimSpace(in.BusinessName)
 	in.Slug = strings.TrimSpace(in.Slug)
@@ -81,6 +88,9 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (store.Photographe
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
+			if strings.Contains(err.Error(), "photographers_slug_key") {
+				return store.Photographer{}, SessionResult{}, ErrSlugTaken
+			}
 			return store.Photographer{}, SessionResult{}, ErrEmailTaken
 		}
 		return store.Photographer{}, SessionResult{}, fmt.Errorf("create photographer: %w", err)
@@ -187,7 +197,28 @@ func validateSignup(in SignupInput) error {
 	if in.Slug == "" {
 		return fmt.Errorf("%w: slug is required", ErrInvalidInput)
 	}
+	if !isValidSlug(in.Slug) {
+		return fmt.Errorf("%w: slug must match ^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$", ErrInvalidInput)
+	}
 	return nil
+}
+
+func isValidSlug(slug string) bool {
+	if len(slug) < 3 || len(slug) > 32 {
+		return false
+	}
+	for i, r := range slug {
+		isLetter := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		isHyphen := r == '-'
+		if !isLetter && !isDigit && !isHyphen {
+			return false
+		}
+		if isHyphen && (i == 0 || i == len(slug)-1) {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeEmail(email string) string {

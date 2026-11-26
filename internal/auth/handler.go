@@ -28,9 +28,9 @@ func (h *Handler) Register(mux *http.ServeMux, _ func(http.Handler) http.Handler
 	// The middleware parameter is accepted so callers can pass it explicitly; in
 	// this slice the app wires middleware globally in main. We keep signature
 	// flexible and simple.
-	mux.HandleFunc("POST /api/v1/auth/signup", h.handleSignup)
-	mux.HandleFunc("POST /api/v1/auth/login", h.handleLogin)
-	mux.HandleFunc("POST /api/v1/auth/logout", h.handleLogout)
+	mux.Handle("POST /api/v1/auth/signup", RequireSameOriginJSON(http.HandlerFunc(h.handleSignup)))
+	mux.Handle("POST /api/v1/auth/login", RequireSameOriginJSON(http.HandlerFunc(h.handleLogin)))
+	mux.Handle("POST /api/v1/auth/logout", RequireSameOriginJSON(http.HandlerFunc(h.handleLogout)))
 	mux.Handle("GET /api/v1/auth/me", RequireAuth(http.HandlerFunc(h.handleMe)))
 }
 
@@ -46,12 +46,13 @@ type authResponse struct {
 	Email        string `json:"email"`
 	BusinessName string `json:"business_name"`
 	Slug         string `json:"slug"`
+	PlanID       string `json:"plan_id"`
 }
 
 func (h *Handler) handleSignup(w http.ResponseWriter, r *http.Request) {
 	var req signupRequest
 	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		httpx.ErrorCode(w, http.StatusBadRequest, "invalid_json", "invalid JSON body")
 		return
 	}
 
@@ -63,13 +64,17 @@ func (h *Handler) handleSignup(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrSignupClosed):
+			httpx.ErrorCode(w, http.StatusForbidden, "signup_closed", "Signups are invite-only right now.")
 		case errors.Is(err, ErrInvalidInput):
-			httpx.Error(w, http.StatusBadRequest, err.Error())
+			httpx.ErrorCode(w, http.StatusBadRequest, "invalid_input", err.Error())
 		case errors.Is(err, ErrEmailTaken):
-			httpx.Error(w, http.StatusConflict, "email already in use")
+			httpx.ErrorCode(w, http.StatusConflict, "email_taken", "email already in use")
+		case errors.Is(err, ErrSlugTaken):
+			httpx.ErrorCode(w, http.StatusConflict, "slug_taken", "slug already in use")
 		default:
 			// Do not leak internal errors; log them in real code if logger is added.
-			httpx.Error(w, http.StatusInternalServerError, "internal server error")
+			httpx.ErrorCode(w, http.StatusInternalServerError, "internal", "internal server error")
 		}
 		return
 	}
@@ -86,17 +91,17 @@ type loginRequest struct {
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := httpx.DecodeJSON(r, &req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		httpx.ErrorCode(w, http.StatusBadRequest, "invalid_json", "invalid JSON body")
 		return
 	}
 
 	photog, sess, err := h.svc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
-			httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
+			httpx.ErrorCode(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
 			return
 		}
-		httpx.Error(w, http.StatusInternalServerError, "internal server error")
+		httpx.ErrorCode(w, http.StatusInternalServerError, "internal", "internal server error")
 		return
 	}
 
@@ -117,7 +122,7 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	photog, ok := PhotographerFromContext(r.Context())
 	if !ok {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		httpx.ErrorCode(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, toAuthResponse(photog))
@@ -155,6 +160,7 @@ func toAuthResponse(p store.Photographer) authResponse {
 		Email:        p.Email,
 		BusinessName: p.BusinessName,
 		Slug:         p.Slug,
+		PlanID:       p.PlanID,
 	}
 }
 

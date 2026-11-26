@@ -22,6 +22,10 @@ type Config struct {
 	// It must be true in production (HTTPS), but local plain HTTP development
 	// needs it false or the browser will refuse to store the cookie.
 	CookieSecure bool
+
+	// SignupEnabled gates public self-signup. The product is invite-only for now,
+	// so this defaults to false. When false, signup returns a stable 403 code.
+	SignupEnabled bool
 }
 
 // Load reads configuration from environment variables and validates required values.
@@ -29,9 +33,10 @@ type Config struct {
 // how to handle missing configuration.
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		Port:         os.Getenv("PORT"),
-		CookieSecure: true,
+		DatabaseURL:   os.Getenv("DATABASE_URL"),
+		Port:          os.Getenv("PORT"),
+		CookieSecure:  true,
+		SignupEnabled: false,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -47,6 +52,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("COOKIE_SECURE must be a boolean: %w", err)
 		}
 		cfg.CookieSecure = secure
+	}
+	if raw := os.Getenv("SIGNUP_ENABLED"); raw != "" {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("SIGNUP_ENABLED must be a boolean: %w", err)
+		}
+		cfg.SignupEnabled = enabled
 	}
 
 	return cfg, nil
