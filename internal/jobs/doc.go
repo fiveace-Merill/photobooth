@@ -1,5 +1,5 @@
-// Package jobs defines River background jobs: reminders, expiry, retries. (Not started.)
+// Package jobs hosts background job wiring.
 //
-// Boundary: do not import another domain package's store/ package. Call its
-// exported service interface instead.
+// Slice 3a runs River workers inside the API process. The structure is kept
+// reusable so a future cmd/worker can register the same workers.
 package jobs

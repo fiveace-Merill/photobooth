@@ -28,11 +28,17 @@ migrate-new: ## Create a migration: make migrate-new name=add_reviews
 sqlc: ## Regenerate Go code from queries.sql files
 	sqlc generate
 
+river-migrate-up: ## Apply River migrations (owner URL)
+	go run ./scripts/river-migrate-up
+
 run: ## Run the API
 	go run ./cmd/api
 
 seed: ## Seed demo data (refuses APP_ENV=production)
 	go run ./scripts/seed
+
+r2check: ## Smoke-check R2 credentials/bucket (requires R2_* env)
+	go run ./scripts/r2check
 
 test: ## Run all tests
 	go test ./...

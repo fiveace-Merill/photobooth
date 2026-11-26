@@ -21,6 +21,7 @@ func TestLoad(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://app:pw@localhost:5432/photobooth?sslmode=disable")
 		t.Setenv("PORT", "")
 		t.Setenv("COOKIE_SECURE", "")
+		t.Setenv("STORAGE_DRIVER", "fake")
 
 		cfg, err := Load()
 		if err != nil {
@@ -32,12 +33,20 @@ func TestLoad(t *testing.T) {
 		if !cfg.CookieSecure {
 			t.Fatal("CookieSecure default = false, want true")
 		}
+		if cfg.MaxPhotoBytes != 60<<20 {
+			t.Fatalf("MaxPhotoBytes = %d", cfg.MaxPhotoBytes)
+		}
 	})
 
 	t.Run("parses explicit values", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://app:pw@localhost:5432/photobooth?sslmode=disable")
 		t.Setenv("PORT", "9090")
 		t.Setenv("COOKIE_SECURE", "false")
+		t.Setenv("STORAGE_DRIVER", "fake")
+		t.Setenv("MAX_PHOTO_BYTES", "1024")
+		t.Setenv("MAX_PHOTOS_PER_SHOOT", "10")
+		t.Setenv("MAX_IMAGE_MEGAPIXELS", "50")
+		t.Setenv("RIVER_MAX_WORKERS", "3")
 
 		cfg, err := Load()
 		if err != nil {
@@ -48,6 +57,9 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.CookieSecure {
 			t.Fatal("CookieSecure = true, want false")
+		}
+		if cfg.MaxPhotoBytes != 1024 || cfg.MaxPhotosPerShoot != 10 || cfg.MaxImageMegapixels != 50 || cfg.RiverMaxWorkers != 3 {
+			t.Fatalf("unexpected limits: %+v", cfg)
 		}
 	})
 

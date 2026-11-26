@@ -15,6 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/fiveace-Merill/photobooth/internal/jobs"
 )
 
 // DB holds connections for integration tests against a real Postgres database.
@@ -78,6 +80,9 @@ func Open(t *testing.T) *DB {
 
 	if err := applyMigrations(ctx, ownerPool, migrationsDir(t)); err != nil {
 		t.Fatalf("apply migrations: %v", err)
+	}
+	if err := jobs.RunMigrations(ctx, ownerPool); err != nil {
+		t.Fatalf("apply river migrations: %v", err)
 	}
 	if err := ensureAppRole(ctx, ownerPool); err != nil {
 		t.Fatalf("ensure app role grants: %v", err)
