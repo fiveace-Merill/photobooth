@@ -20,3 +20,12 @@ export function validateKenyanPhone(input: string): boolean {
     return false;
   }
 }
+
+// Display stored phone (2547...) as local readable format 0712 345 678.
+export function formatKenyanPhone(phone: string): string {
+  const cleaned = phone.replace(/[\s-]/g, "");
+  const m = cleaned.match(/^254([71]\d{8})$/);
+  if (!m) return phone;
+  const local = `0${m[1]}`;
+  return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7, 10)}`;
+}

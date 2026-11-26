@@ -14,3 +14,24 @@ export function formatMoney(minor: number, currency: string): string {
   }
   return `${sign}${currency} ${wholeFormatted}.${String(cents).padStart(2, "0")}`;
 }
+
+// Parse a whole-KES user input like "3,000" or "3000" into minor units.
+export function parseKesToMinor(input: string): number {
+  const cleaned = input.replace(/,/g, "").trim();
+  if (!/^\d+$/.test(cleaned)) {
+    throw new Error("invalid KES amount");
+  }
+  const whole = Number(cleaned);
+  if (!Number.isSafeInteger(whole) || whole < 0 || whole > 1_000_000) {
+    throw new Error("invalid KES amount");
+  }
+  return whole * 100;
+}
+
+export function formatKesInput(minor: number): string {
+  if (!Number.isInteger(minor) || minor < 0) {
+    throw new Error("minor units must be a non-negative integer");
+  }
+  const whole = Math.floor(minor / 100);
+  return whole.toLocaleString("en-KE");
+}

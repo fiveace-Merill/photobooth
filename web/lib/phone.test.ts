@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeKenyanPhone, validateKenyanPhone } from "./phone";
+import { formatKenyanPhone, normalizeKenyanPhone, validateKenyanPhone } from "./phone";
 
 describe("Kenyan Safaricom phone validation", () => {
   it("accepts local 07xx numbers", () => {
@@ -21,5 +21,20 @@ describe("Kenyan Safaricom phone validation", () => {
     expect(validateKenyanPhone("")).toBe(false);
     expect(validateKenyanPhone("12345")).toBe(false);
     expect(validateKenyanPhone("+255712345678")).toBe(false);
+  });
+});
+
+describe("formatKenyanPhone", () => {
+  it("formats stored 2547 numbers for display", () => {
+    expect(formatKenyanPhone("254712345678")).toBe("0712 345 678");
+  });
+
+  it("formats stored 2541 numbers for display", () => {
+    expect(formatKenyanPhone("254112345678")).toBe("0112 345 678");
+  });
+
+  it("returns original for unexpected values", () => {
+    expect(formatKenyanPhone("")).toBe("");
+    expect(formatKenyanPhone("unknown")).toBe("unknown");
   });
 });
