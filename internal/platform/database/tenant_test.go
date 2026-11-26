@@ -69,7 +69,7 @@ func TestWithTenant_Isolation(t *testing.T) {
 	// Photographer 1 sees only their own client.
 	err = database.WithTenant(ctx, tdb.App, p1, func(tx pgx.Tx) error {
 		q := store.New(tx)
-		clients, err := q.ListClients(ctx, p1)
+		clients, err := q.ListClients(ctx, store.ListClientsParams{PhotographerID: p1, Limit: 25, Offset: 0})
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ func TestWithTenant_Isolation(t *testing.T) {
 	// Photographer 2 sees only their own client.
 	err = database.WithTenant(ctx, tdb.App, p2, func(tx pgx.Tx) error {
 		q := store.New(tx)
-		clients, err := q.ListClients(ctx, p2)
+		clients, err := q.ListClients(ctx, store.ListClientsParams{PhotographerID: p2, Limit: 25, Offset: 0})
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func TestWithTenant_Isolation(t *testing.T) {
 		q := store.New(tx)
 		// Pass p1's ID in the query arg: even with an explicit filter, RLS must
 		// still prevent access when tenant context is missing.
-		clients, err := q.ListClients(ctx, p1)
+		clients, err := q.ListClients(ctx, store.ListClientsParams{PhotographerID: p1, Limit: 25, Offset: 0})
 		if err != nil {
 			return err
 		}

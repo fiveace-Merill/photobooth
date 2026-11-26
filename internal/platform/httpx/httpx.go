@@ -9,8 +9,10 @@ import (
 
 // ErrorResponse is the consistent JSON shape returned by API errors.
 // Keeping error responses uniform makes frontend handling predictable.
+// Code is a stable machine-readable identifier; Error is human-readable.
 type ErrorResponse struct {
 	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }
 
 // WriteJSON writes a JSON response with the given status code.
@@ -29,6 +31,11 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 // clients; pass a safe, user-meaningful message.
 func Error(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, ErrorResponse{Error: message})
+}
+
+// ErrorCode writes a JSON error response with a stable machine-readable code.
+func ErrorCode(w http.ResponseWriter, status int, code, message string) {
+	WriteJSON(w, status, ErrorResponse{Error: message, Code: code})
 }
 
 // DecodeJSON reads and decodes a single JSON object from the request body.

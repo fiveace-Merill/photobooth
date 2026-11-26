@@ -49,6 +49,7 @@ make check                    # gofmt -w + go vet + go test ./...
 - The ledger is append-only (a DB trigger rejects UPDATE/DELETE); corrections are new reversing entries. Entries sharing a `txn_id` must sum to zero. Snapshot commission on the payment; never recompute history.
 - M-PESA callbacks arrive late, twice or out of order: save the raw callback first, dedupe on `(provider, provider_txn_id)`, make handlers idempotent and retryable. `payment_callbacks` is intentionally not tenant-scoped (tenant unknown on arrival).
 - Only verified server-side callbacks/status queries mark payments paid or unlock originals — never the browser. Tests required for idempotency, commission and unlock-on-payment.
+- delivered and expired are set only by system code; photographers set shot, editing and ready.
 
 ## SQL, secrets, retention
 - All SQL lives in sqlc `queries.sql` files — no raw or string-concatenated SQL in Go. Multi-table writes use transactions. Schema changes only via a new goose migration with a working `Down`; never edit an applied migration.

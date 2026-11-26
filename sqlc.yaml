@@ -25,5 +25,15 @@ sql:
         sql_package: pgx/v5
         emit_json_tags: false
 
+  - name: shoots
+    engine: postgresql
+    schema: migrations
+    queries: internal/shoots/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/shoots/store
+        sql_package: pgx/v5
+        emit_json_tags: false
+
   # - name: tenant    -> internal/tenant/queries.sql    -> internal/tenant/store
-  # - name: shoots    -> internal/shoots/queries.sql    -> internal/shoots/store

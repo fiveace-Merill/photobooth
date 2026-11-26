@@ -11,6 +11,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clientExists = `-- name: ClientExists :one
+SELECT EXISTS(
+  SELECT 1 FROM clients WHERE photographer_id = $1 AND id = $2
+) AS exists
+`
+
+type ClientExistsParams struct {
+	PhotographerID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) ClientExists(ctx context.Context, arg ClientExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, clientExists, arg.PhotographerID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createClient = `-- name: CreateClient :one
 INSERT INTO clients (photographer_id, name, phone, email, notes)
 VALUES ($1, $2, $3, $4, $5)
@@ -47,6 +65,24 @@ func (q *Queries) CreateClient(ctx context.Context, arg CreateClientParams) (Cli
 	return i, err
 }
 
+const deleteClient = `-- name: DeleteClient :execrows
+DELETE FROM clients
+WHERE photographer_id = $1 AND id = $2
+`
+
+type DeleteClientParams struct {
+	PhotographerID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) DeleteClient(ctx context.Context, arg DeleteClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClient, arg.PhotographerID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getClient = `-- name: GetClient :one
 SELECT id, photographer_id, name, phone, email, notes, created_at, updated_at
 FROM clients
@@ -74,25 +110,84 @@ func (q *Queries) GetClient(ctx context.Context, arg GetClientParams) (Client, e
 	return i, err
 }
 
-const listClients = `-- name: ListClients :many
-
+const getClientByPhone = `-- name: GetClientByPhone :one
 SELECT id, photographer_id, name, phone, email, notes, created_at, updated_at
 FROM clients
-WHERE photographer_id = $1
-ORDER BY name
+WHERE photographer_id = $1 AND phone = $2
 `
+
+type GetClientByPhoneParams struct {
+	PhotographerID pgtype.UUID
+	Phone          pgtype.Text
+}
+
+func (q *Queries) GetClientByPhone(ctx context.Context, arg GetClientByPhoneParams) (Client, error) {
+	row := q.db.QueryRow(ctx, getClientByPhone, arg.PhotographerID, arg.Phone)
+	var i Client
+	err := row.Scan(
+		&i.ID,
+		&i.PhotographerID,
+		&i.Name,
+		&i.Phone,
+		&i.Email,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listClients = `-- name: ListClients :many
+
+SELECT id, photographer_id, name, phone, email, notes, created_at, updated_at,
+       COUNT(*) OVER() AS total
+FROM clients
+WHERE photographer_id = $1
+  AND (
+    $4::text IS NULL
+    OR name ILIKE '%' || $4::text || '%'
+    OR COALESCE(phone, '') ILIKE '%' || $4::text || '%'
+    OR COALESCE(email::text, '') ILIKE '%' || $4::text || '%'
+  )
+ORDER BY name
+LIMIT $2 OFFSET $3
+`
+
+type ListClientsParams struct {
+	PhotographerID pgtype.UUID
+	Limit          int32
+	Offset         int32
+	Q              pgtype.Text
+}
+
+type ListClientsRow struct {
+	ID             pgtype.UUID
+	PhotographerID pgtype.UUID
+	Name           string
+	Phone          pgtype.Text
+	Email          pgtype.Text
+	Notes          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Total          int64
+}
 
 // Queries for the clients package. sqlc turns these into Go in internal/clients/store.
 // RULE: every query on tenant data filters by photographer_id.
-func (q *Queries) ListClients(ctx context.Context, photographerID pgtype.UUID) ([]Client, error) {
-	rows, err := q.db.Query(ctx, listClients, photographerID)
+func (q *Queries) ListClients(ctx context.Context, arg ListClientsParams) ([]ListClientsRow, error) {
+	rows, err := q.db.Query(ctx, listClients,
+		arg.PhotographerID,
+		arg.Limit,
+		arg.Offset,
+		arg.Q,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Client
+	var items []ListClientsRow
 	for rows.Next() {
-		var i Client
+		var i ListClientsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PhotographerID,
@@ -102,6 +197,7 @@ func (q *Queries) ListClients(ctx context.Context, photographerID pgtype.UUID) (
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}
@@ -111,4 +207,83 @@ func (q *Queries) ListClients(ctx context.Context, photographerID pgtype.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const namesByIDs = `-- name: NamesByIDs :many
+SELECT id, name
+FROM clients
+WHERE photographer_id = $1 AND id = ANY($2::uuid[])
+`
+
+type NamesByIDsParams struct {
+	PhotographerID pgtype.UUID
+	Ids            []pgtype.UUID
+}
+
+type NamesByIDsRow struct {
+	ID   pgtype.UUID
+	Name string
+}
+
+func (q *Queries) NamesByIDs(ctx context.Context, arg NamesByIDsParams) ([]NamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, namesByIDs, arg.PhotographerID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NamesByIDsRow
+	for rows.Next() {
+		var i NamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateClient = `-- name: UpdateClient :one
+UPDATE clients
+SET name = $3,
+    phone = $4,
+    email = $5,
+    notes = $6,
+    updated_at = now()
+WHERE photographer_id = $1 AND id = $2
+RETURNING id, photographer_id, name, phone, email, notes, created_at, updated_at
+`
+
+type UpdateClientParams struct {
+	PhotographerID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Phone          pgtype.Text
+	Email          pgtype.Text
+	Notes          pgtype.Text
+}
+
+func (q *Queries) UpdateClient(ctx context.Context, arg UpdateClientParams) (Client, error) {
+	row := q.db.QueryRow(ctx, updateClient,
+		arg.PhotographerID,
+		arg.ID,
+		arg.Name,
+		arg.Phone,
+		arg.Email,
+		arg.Notes,
+	)
+	var i Client
+	err := row.Scan(
+		&i.ID,
+		&i.PhotographerID,
+		&i.Name,
+		&i.Phone,
+		&i.Email,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

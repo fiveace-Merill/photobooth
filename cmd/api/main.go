@@ -11,8 +11,10 @@ import (
 
 	"github.com/fiveace-Merill/photobooth/internal/auth"
 	authstore "github.com/fiveace-Merill/photobooth/internal/auth/store"
+	"github.com/fiveace-Merill/photobooth/internal/clients"
 	"github.com/fiveace-Merill/photobooth/internal/platform/config"
 	"github.com/fiveace-Merill/photobooth/internal/platform/database"
+	"github.com/fiveace-Merill/photobooth/internal/shoots"
 )
 
 func main() {
@@ -32,9 +34,18 @@ func main() {
 	}
 	defer pool.Close()
 
-	authSvc := auth.NewService(authstore.New(pool))
+	authSvc := auth.NewService(authstore.New(pool), cfg.SignupEnabled)
 	authHandler := auth.NewHandler(authSvc, cfg.CookieSecure)
 	authMiddleware := auth.NewMiddleware(authSvc, cfg.CookieSecure)
+
+	clientsSvc := clients.NewService(pool)
+	clientsHandler := clients.NewHandler(clientsSvc)
+	shootsSvc, err := shoots.NewService(pool, clientsSvc)
+	if err != nil {
+		slog.Error("init shoots service", "err", err)
+		os.Exit(1)
+	}
+	shootsHandler := shoots.NewHandler(shootsSvc)
 
 	mux := http.NewServeMux()
 
@@ -47,6 +58,8 @@ func main() {
 	})
 
 	authHandler.Register(mux, authMiddleware)
+	clientsHandler.Register(mux, auth.RequireAuth)
+	shootsHandler.Register(mux, auth.RequireAuth)
 
 	// Wrap the whole mux with auth middleware so authenticated requests get the
 	// photographer loaded into context. Individual handlers can require auth.

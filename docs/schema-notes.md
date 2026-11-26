@@ -26,6 +26,12 @@ Read this before changing anything in `/migrations` or writing queries. The migr
 
 Seeded in `plans`: Free = 0/month, 8% commission, 5 GB, 30 days. Pro = KES 1,000/month, 3% commission, 100 GB, 180 days. Change them with an `UPDATE`/new migration, not in Go code.
 
+## Shoot status semantics
+
+- `shot`, `editing`, `ready`, `delivered`, `expired` are the stored statuses.
+- Photographers may set `shot`, `editing`, `ready` through the API, in any order. `delivered` and `expired` are set only by system code in later slices.
+- `price_minor = 0` means free delivery.
+
 ## Not designed yet
 
 Notifications log, reviews/testimonials, expiry job bookkeeping, subscription billing for photographers. Design each in its own slice.

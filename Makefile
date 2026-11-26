@@ -31,6 +31,9 @@ sqlc: ## Regenerate Go code from queries.sql files
 run: ## Run the API
 	go run ./cmd/api
 
+seed: ## Seed demo data (refuses APP_ENV=production)
+	go run ./scripts/seed
+
 test: ## Run all tests
 	go test ./...
 
