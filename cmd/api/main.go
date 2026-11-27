@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	"github.com/fiveace-Merill/photobooth/internal/auth"
 	authstore "github.com/fiveace-Merill/photobooth/internal/auth/store"
 	"github.com/fiveace-Merill/photobooth/internal/clients"
+	"github.com/fiveace-Merill/photobooth/internal/deliveries"
 	"github.com/fiveace-Merill/photobooth/internal/jobs"
+	"github.com/fiveace-Merill/photobooth/internal/notify"
 	"github.com/fiveace-Merill/photobooth/internal/photos"
 	"github.com/fiveace-Merill/photobooth/internal/platform/config"
 	"github.com/fiveace-Merill/photobooth/internal/platform/database"
@@ -86,9 +89,12 @@ func main() {
 	}
 
 	riverWorkers := river.NewWorkers()
-	river.AddWorker(riverWorkers, photos.NewProcessPhotoWorker(pool, store, cfg.MaxImageMegapixels, slog.Default()))
+	photosWorker := photos.NewProcessPhotoWorker(pool, store, cfg.MaxImageMegapixels, slog.Default()).WithTestDelay(cfg.PhotoTestDelay)
+	river.AddWorker(riverWorkers, photosWorker)
 	river.AddWorker(riverWorkers, photos.NewDeleteObjectsWorker(store, slog.Default()))
-	riverClient, err := jobs.NewClient(pool, riverWorkers, cfg.RiverMaxWorkers, slog.Default())
+	river.AddWorker(riverWorkers, photos.NewReapStaleProcessingWorker(pool, slog.Default()))
+	river.AddWorker(riverWorkers, notify.NewCleanupQueuedNotificationsWorker(pool, slog.Default()))
+	riverClient, err := jobs.NewClient(pool, riverWorkers, cfg.RiverMaxWorkers, slog.Default(), photos.NewProcessPhotoFinalizeHook(pool))
 	if err != nil {
 		slog.Error("init river client", "err", err)
 		os.Exit(1)
@@ -109,6 +115,24 @@ func main() {
 	shootsHandler := shoots.NewHandler(shootsSvc)
 	photosSvc := photos.NewService(photos.Deps{Pool: pool, Objects: store, River: riverClient, MaxPhotoBytes: cfg.MaxPhotoBytes, MaxPhotosPerShoot: cfg.MaxPhotosPerShoot, MaxImageMegapixels: cfg.MaxImageMegapixels, Logger: slog.Default()})
 	photosHandler := photos.NewHandler(photosSvc)
+	notifySvc, err := notify.NewServiceFromConfig(pool, notify.FactoryConfig{
+		AppEnv:                         strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV"))),
+		EmailProvider:                  cfg.EmailProvider,
+		SMTPHost:                       cfg.SMTPHost,
+		SMTPPort:                       cfg.SMTPPort,
+		SMTPUser:                       cfg.SMTPUser,
+		SMTPPassword:                   cfg.SMTPPassword,
+		SMTPTLS:                        cfg.SMTPTLS,
+		MailFromAddress:                cfg.MailFromAddress,
+		MailFromName:                   cfg.MailFromName,
+		EmailDailyLimitPerPhotographer: cfg.EmailDailyLimitPerPhotographer,
+	}, slog.Default())
+	if err != nil {
+		slog.Error("init notify service", "err", err)
+		os.Exit(1)
+	}
+	deliveriesSvc := deliveries.NewService(pool, store, cfg.PublicAppURL, deliveries.NewNotifyAdapter(notifySvc))
+	deliveriesHandler := deliveries.NewHandler(deliveriesSvc)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -122,8 +146,21 @@ func main() {
 	photosHandler.Register(mux, func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) { auth.RequireAuth(http.HandlerFunc(h)).ServeHTTP(w, r) }
 	})
+	deliveriesHandler.Register(mux, func(h http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) { auth.RequireAuth(http.HandlerFunc(h)).ServeHTTP(w, r) }
+	})
 
-	srv := &http.Server{Addr: ":" + cfg.Port, Handler: authMiddleware(mux)}
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           authMiddleware(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// WriteTimeout is intentionally unset so unlocked delivery zip streams
+		// can run longer than normal API requests. Public handlers set
+		// Cache-Control/Referrer-Policy and download handler sets a per-request
+		// write deadline.
+		IdleTimeout: 120 * time.Second,
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -131,6 +168,18 @@ func main() {
 		slog.Error("start river", "err", err)
 		os.Exit(1)
 	}
+	// Safety net: if River discards/cancels a job and the finalize hook cannot
+	// update the photo, reap stale processing rows periodically.
+	riverClient.PeriodicJobs().Add(river.NewPeriodicJob(
+		river.PeriodicInterval(5*time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) { return photos.ReapStaleProcessingArgs{}, nil },
+		&river.PeriodicJobOpts{RunOnStart: true},
+	))
+	riverClient.PeriodicJobs().Add(river.NewPeriodicJob(
+		river.PeriodicInterval(5*time.Minute),
+		func() (river.JobArgs, *river.InsertOpts) { return notify.CleanupQueuedNotificationsArgs{}, nil },
+		&river.PeriodicJobOpts{RunOnStart: true},
+	))
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

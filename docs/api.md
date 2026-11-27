@@ -159,3 +159,160 @@ Aborts upload if uploading; deletes DB row and releases quota exactly once; best
 | `shoot_not_uploadable` | 409 | Shoot cannot accept uploads (e.g. expired) |
 | `invalid_photo_state` | 409 | Photo state does not allow operation |
 | `size_mismatch` | 422 | Completed object size differs from declared size |
+| `already_delivered` | 409 | Shoot already has an active delivery link |
+| `shoot_not_deliverable` | 409 | Shoot has no ready photos or still has processing photos |
+| `not_delivered` | 409 | Shoot has not been delivered yet |
+| `no_active_link` | 409 | No active delivery link to revoke |
+| `already_unlocked` | 409 | Originals already unlocked |
+| `invalid_mark_paid` | 409 | Manual mark-paid not allowed in current state |
+| `originals_locked` | 403 | Public original/download requested before unlock |
+| `rate_limited` | 429 | Public delivery IP rate limit exceeded |
+| `channel_unavailable` | 422 | Requested notification channel unavailable (e.g. client missing/invalid email) |
+| `too_many_sends` | 429 | Too many delivery email attempts for this shoot (5/hour) |
+| `email_daily_limit_reached` | 429 | Photographer daily email limit reached (Africa/Nairobi day) |
+
+## Delivery (photographer, session)
+
+All endpoints require authentication and return 404 for shoots not owned by the session photographer.
+
+Delivery links are sent inline in the create/regenerate request when requested. The raw delivery token/URL is never persisted or logged; it is only returned in the create/regenerate response and, if email send is requested, sent directly to the mail server in the same request.
+
+### POST /api/v1/shoots/{id}/deliver
+Creates a private gallery link and marks shoot as delivered. Requires at least one ready photo and no processing photos.
+
+Optional body:
+```json
+{ "send": { "email": true } }
+```
+
+Rules:
+- If `priceMinor == 0`, originals unlock at delivery (`originals_unlocked_at` set).
+- If `priceMinor > 0`, originals remain locked until mark-paid (pilot) or verified payment (M-PESA slice).
+- `delivered` is a system action; photographers cannot set it via `/status`.
+- if `send.email` is true and client has no valid email: `422 channel_unavailable` before any link is created
+- if `send.email` is true, per-shoot limit is 5 send attempts/hour: `429 too_many_sends`; daily per-photographer cap is `EMAIL_DAILY_LIMIT_PER_PHOTOGRAPHER` counted in Africa/Nairobi days: `429 email_daily_limit_reached`
+- link creation is committed before email send; provider failure never rolls back link creation
+- email send result is reported in `notifications`; "sent" means the mail server accepted the message, never "delivered" to inbox
+
+Response `201`:
+```json
+{
+  "url": "https://app.example.com/g/<token>",
+  "expiresAt": "RFC3339",
+  "notifications": [
+    { "channel": "email", "status": "sent|failed", "errorCode": "recipient_rejected|send_failed|send_timeout" }
+  ]
+}
+```
+`notifications` is empty/omitted when no send was requested. The raw token is shown once and never stored or returned again. Errors: `409 already_delivered`, `409 shoot_not_deliverable`.
+
+### POST /api/v1/shoots/{id}/link/regenerate
+Revokes active link, creates a new link, writes shoot event. "Send again" uses this endpoint with `{ "send": { "email": true } }`; regenerating invalidates the previous link.
+
+- not delivered yet: `409 not_delivered`
+- same send/limit/channel rules as deliver
+
+Response `200`: same shape as deliver.
+
+### POST /api/v1/shoots/{id}/link/revoke
+Revokes active link and writes shoot event. Response `204`. 409 `no_active_link`.
+
+### POST /api/v1/shoots/{id}/mark-paid
+Manual pilot unlock for payments received outside Photobooth. Body: `{method: "cash"|"mpesa_direct"|"other", note?}`.
+
+Allowed only when shoot is delivered, `priceMinor > 0`, and originals are not unlocked. Sets `originals_unlocked_at`, writes `manual_mark_paid` event. Does **not** write `payments` or `ledger_entries`; manual payments sit outside the commission system.
+
+Response `204`. Errors: `409 already_unlocked`, `409 invalid_mark_paid`, `400 invalid_input`.
+
+### GET /api/v1/shoots/{id}/delivery
+Response `200`:
+```json
+{
+  "linkState": "active|revoked|none",
+  "expiresAt": "RFC3339",
+  "lastViewedAt": "RFC3339",
+  "unlocked": false,
+  "events": [{"id":"uuid","shootId":"uuid","photoId":"uuid|null","kind":"...","payload":{},"createdAt":"RFC3339"}]
+}
+```
+Never returns token or URL. `events` contains last 20 shoot events.
+
+### GET /api/v1/shoots/{id}/notifications
+Lists delivery notification attempts for a shoot. Recipient is masked (`j***@gmail.com`).
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "channel": "email",
+      "status": "queued|sent|failed",
+      "createdAt": "RFC3339",
+      "errorCode": "send_failed",
+      "recipient": "j***@gmail.com"
+    }
+  ]
+}
+```
+
+### GET /api/v1/shoots/{id}/delivery/message-preview
+Returns a safe email preview with placeholder URL (never a real delivery token). Auth required.
+
+Response `200`:
+```json
+{
+  "subject": "Your photos from Wedding are ready",
+  "bodyText": "... https://photobooth.example/g/preview ...",
+  "recipientMasked": "j***@gmail.com",
+  "emailsRemainingToday": 49,
+  "availability": {
+    "email": { "available": true, "reason": "" }
+  }
+}
+```
+
+## Delivery (public, no session)
+
+Public endpoints are rate limited per IP with an in-memory single-process limiter (resets on restart). Responses include `Cache-Control: private, no-store` and `Referrer-Policy: no-referrer`.
+
+Invalid, revoked, and expired tokens return identical `404` with body `{"error":"Not found","code":"not_found"}`.
+
+### GET /api/v1/deliveries/{token}
+Returns delivery DTO. Updates `last_viewed_at` at most once per minute.
+
+Preview DTO (locked) - never contains original URL/key:
+```json
+{
+  "status":"preview",
+  "studioName":"Studio",
+  "studioPhone":"2547...",
+  "title":"Shoot",
+  "shotOn":"YYYY-MM-DD",
+  "priceMinor":300000,
+  "currency":"KES",
+  "expiresAt":"RFC3339",
+  "features":{"payments":"manual","reviews":false},
+  "photos":[{"id":"uuid","width":1200,"height":800,"thumbUrl":"...","previewUrl":"..."}]
+}
+```
+
+Unlocked DTO adds original API paths and total bytes:
+```json
+{
+  "status":"unlocked",
+  "...":"...",
+  "downloadAllUrl":"/api/v1/deliveries/{token}/download",
+  "totalOriginalBytes":12345,
+  "photos":[{"...":"...","originalUrl":"/api/v1/deliveries/{token}/photos/{photoId}/original"}]
+}
+```
+
+`thumbUrl` and `previewUrl` are presigned R2 GET URLs (TTL 1h) to watermarked files.
+
+### GET /api/v1/deliveries/{token}/photos/{photoId}/original
+Checks unlock on every request. `403 originals_locked` when locked. When unlocked, returns `302` to presigned R2 GET (TTL 15m) with `Content-Disposition` attachment filename (RFC 5987).
+
+### GET /api/v1/deliveries/{token}/download
+Unlocked only. Streams a ZIP (`application/zip`) with `Store` (no compression) directly from R2 without buffering whole files/ZIP. Filename is sanitized shoot title. Logs `delivery_download_all` event.
+
+Limits/honesty: no HTTP range/resume; if connection drops client restarts. Long request: reverse proxy (Caddy) must allow long read/write/idle timeouts; the API sets per-request write deadline for downloads and does not set a global `WriteTimeout`. Streams through VPS bandwidth; large shoots may take minutes. ZIP size/content length is not known in advance.
