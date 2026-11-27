@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Repeatable kill-recovery test for process_photo.
+# Requires: db up, migrations applied, R2 configured, SIGNUP_ENABLED=true.
+# Usage: make photo-kill-test
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+set -a; . ./.env; set +a
+
+export APP_ENV=${APP_ENV:-development}
+export STORAGE_DRIVER=${STORAGE_DRIVER:-r2}
+export SIGNUP_ENABLED=true
+export PHOTO_TEST_DELAY=${PHOTO_TEST_DELAY:-90s}
+export RIVER_MAX_WORKERS=${RIVER_MAX_WORKERS:-1}
+PORT=${PORT:-8080}
+BASE="http://localhost:${PORT}"
+LOG1=/tmp/photobooth-api-killtest-1.log
+LOG2=/tmp/photobooth-api-killtest-2.log
+
+cleanup_port() { lsof -ti:"$PORT" | xargs -r kill -9 || true; }
+cleanup_port
+rm -f /tmp/pb_killtest_*.json /tmp/pb_killtest_*.jpg
+
+python3 - <<'PY'
+from PIL import Image,ImageDraw; import random,io,os
+random.seed(2)
+img=Image.new('RGB',(1600,1200),(100,120,140))
+d=ImageDraw.Draw(img)
+for i in range(1500):
+    d.line((random.randrange(1600),random.randrange(1200),random.randrange(1600),random.randrange(1200)),fill=(random.randrange(255),random.randrange(255),random.randrange(255)),width=1)
+img.save('/tmp/pb_killtest.jpg','JPEG',quality=92)
+print(os.path.getsize('/tmp/pb_killtest.jpg'))
+PY
+
+go run ./cmd/api >"$LOG1" 2>&1 & PID1=$!
+for i in {1..60}; do curl -sf "$BASE/healthz" >/dev/null && break; sleep 1; done
+
+python3 - <<'PY'
+import json,urllib.request,urllib.error,http.cookiejar,uuid,os,time
+base=os.environ.get('BASE','http://localhost:8080')
+cj=http.cookiejar.CookieJar(); op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+origin=base
+def req(m,p,b=None,timeout=120):
+    h={'Origin':origin}
+    data=None
+    if b is not None: data=json.dumps(b).encode(); h['Content-Type']='application/json'
+    r=urllib.request.Request(base+p,data=data,headers=h,method=m)
+    try:
+        res=op.open(r,timeout=timeout); return res.status,res.read()
+    except urllib.error.HTTPError as e: return e.code,e.read()
+email=f'killtest+{uuid.uuid4().hex[:8]}@example.com'; pw='super-secret-password'
+slug='killtest-'+uuid.uuid4().hex[:8]
+s,b=req('POST','/api/v1/auth/signup',{'email':email,'password':pw,'business_name':'Killtest Studio','slug':slug})
+assert s==201, (s,b)
+s,b=req('POST','/api/v1/clients',{'name':'K','phone':'0712000009'}); client=json.loads(b)['id']
+s,b=req('POST','/api/v1/shoots',{'clientId':client,'title':'Killtest','priceMinor':0,'currency':'KES'}); shoot=json.loads(b)['id']
+size=os.path.getsize('/tmp/pb_killtest.jpg')
+s,b=req('POST',f'/api/v1/shoots/{shoot}/photos/uploads',{'filename':'k.jpg','contentType':'image/jpeg','sizeBytes':size})
+up=json.loads(b); photo=up['photoId']
+parts=up['uploadParts']
+data=open('/tmp/pb_killtest.jpg','rb').read(); etags=[]
+for p in parts:
+    start=(p['partNumber']-1)*up['partSizeBytes']; chunk=data[start:start+up['partSizeBytes']]
+    r=urllib.request.Request(p['url'],data=chunk,method='PUT',headers={'Content-Type':'image/jpeg'})
+    resp=urllib.request.urlopen(r,timeout=300); etag=resp.headers.get('ETag')
+    etags.append({'partNumber':p['partNumber'],'etag':etag.strip('"')})
+s,b=req('POST',f'/api/v1/shoots/{shoot}/photos/{photo}/complete',{'parts':etags})
+assert s==200,(s,b)
+open('/tmp/pb_killtest_ctx.json','w').write(json.dumps({'email':email,'pw':pw,'shoot':shoot,'photo':photo,'client':client}))
+print('created',photo)
+PY
+
+sleep 2
+kill -9 "$PID1" || true
+echo "killed_at=$(date -Iseconds)"
+
+unset PHOTO_TEST_DELAY
+go run ./cmd/api >"$LOG2" 2>&1 & PID2=$!
+for i in {1..90}; do curl -sf "$BASE/healthz" >/dev/null && break; sleep 1; done
+
+python3 - <<'PY'
+import json,urllib.request,urllib.error,http.cookiejar,os,time,subprocess
+base=os.environ.get('BASE','http://localhost:8080')
+ctx=json.load(open('/tmp/pb_killtest_ctx.json'))
+cj=http.cookiejar.CookieJar(); op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+origin=base
+def req(m,p,b=None,timeout=120):
+    h={'Origin':origin}
+    data=None
+    if b is not None: data=json.dumps(b).encode(); h['Content-Type']='application/json'
+    r=urllib.request.Request(base+p,data=data,headers=h,method=m)
+    try:
+        res=op.open(r,timeout=timeout); return res.status,res.read()
+    except urllib.error.HTTPError as e: return e.code,e.read()
+s,b=req('POST','/api/v1/auth/login',{'email':ctx['email'],'password':ctx['pw']}); assert s==200,(s,b)
+shoot=ctx['shoot']; photo=ctx['photo']
+deadline=time.time()+420
+status=None
+while time.time()<deadline:
+    s,b=req('GET',f'/api/v1/shoots/{shoot}/photos')
+    d=json.loads(b)
+    it=[x for x in d['items'] if x['id']==photo][0]
+    status=it['status']
+    print('poll',time.strftime('%Y-%m-%dT%H:%M:%S%z'),status,it.get('error'))
+    if status in ('ready','failed'): break
+    time.sleep(5)
+print('final_status',status)
+# River attempt count from DB
+import os
+db=os.environ['DATABASE_URL']
+# use psql via docker compose
+cmd=['docker','compose','exec','-T','db','psql','-U','photobooth_owner','-d','photobooth','-t','-A','-c',f"select attempt,state,created_at,attempted_at,finalized_at from river_job where kind='process_photo' and args->>'photoId'='{photo}' order by created_at desc limit 1;"]
+out=subprocess.check_output(cmd,text=True).strip()
+print('river',out)
+print('photo',photo,'shoot',shoot,'client',ctx.get('client'))
+open('/tmp/pb_killtest_result.json','w').write(json.dumps({'photo':photo,'shoot':shoot,'client':ctx.get('client'),'email':ctx['email'],'status':status,'river':out}))
+if status!='ready': raise SystemExit(2)
+PY
+
+kill -9 "$PID2" || true

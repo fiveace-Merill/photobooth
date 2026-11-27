@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds environment-driven settings for the API process.
@@ -46,6 +47,21 @@ type Config struct {
 	MaxPhotosPerShoot  int
 	MaxImageMegapixels int
 	RiverMaxWorkers    int
+
+	// PhotoTestDelay slows process_photo before processing. It is for kill/recovery
+	// testing only and is ignored when APP_ENV=production.
+	PhotoTestDelay time.Duration
+
+	// Email delivery (slice 4). Never log secrets or delivery URLs/tokens.
+	EmailProvider                  string
+	SMTPHost                       string
+	SMTPPort                       int
+	SMTPUser                       string
+	SMTPPassword                   string
+	SMTPTLS                        string
+	MailFromAddress                string
+	MailFromName                   string
+	EmailDailyLimitPerPhotographer int
 }
 
 // Load reads configuration from environment variables and validates required values.
@@ -65,8 +81,8 @@ func Load() (Config, error) {
 		PublicAppURL:       strings.TrimRight(strings.TrimSpace(getenvDefault("PUBLIC_APP_URL", "http://localhost:3000")), "/"),
 		MaxPhotoBytes:      60 << 20,
 		MaxPhotosPerShoot:  500,
-		MaxImageMegapixels: 100,
-		RiverMaxWorkers:    2,
+		MaxImageMegapixels: 50,
+		RiverMaxWorkers:    1,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -118,6 +134,56 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("RIVER_MAX_WORKERS must be a positive integer")
 		}
 		cfg.RiverMaxWorkers = v
+	}
+	if raw := os.Getenv("PHOTO_TEST_DELAY"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d < 0 {
+			return Config{}, fmt.Errorf("PHOTO_TEST_DELAY must be a non-negative duration")
+		}
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") {
+			d = 0
+		}
+		cfg.PhotoTestDelay = d
+	}
+
+	cfg.EmailProvider = strings.ToLower(strings.TrimSpace(getenvDefault("EMAIL_PROVIDER", "log")))
+	cfg.SMTPHost = strings.TrimSpace(getenvDefault("SMTP_HOST", "mailpit"))
+	cfg.SMTPPort = 1025
+	if raw := os.Getenv("SMTP_PORT"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 || v > 65535 {
+			return Config{}, fmt.Errorf("SMTP_PORT must be a valid port number")
+		}
+		cfg.SMTPPort = v
+	}
+	cfg.SMTPUser = os.Getenv("SMTP_USER")
+	cfg.SMTPPassword = os.Getenv("SMTP_PASSWORD")
+	cfg.SMTPTLS = strings.ToLower(strings.TrimSpace(getenvDefault("SMTP_TLS", "none")))
+	cfg.MailFromAddress = strings.TrimSpace(getenvDefault("MAIL_FROM_ADDRESS", "no-reply@photobooth.local"))
+	cfg.MailFromName = strings.TrimSpace(getenvDefault("MAIL_FROM_NAME", "Photobooth"))
+	cfg.EmailDailyLimitPerPhotographer = 50
+	if raw := os.Getenv("EMAIL_DAILY_LIMIT_PER_PHOTOGRAPHER"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return Config{}, fmt.Errorf("EMAIL_DAILY_LIMIT_PER_PHOTOGRAPHER must be a positive integer")
+		}
+		cfg.EmailDailyLimitPerPhotographer = v
+	}
+	switch cfg.EmailProvider {
+	case "log", "smtp":
+	default:
+		return Config{}, fmt.Errorf("EMAIL_PROVIDER must be log or smtp")
+	}
+	switch cfg.SMTPTLS {
+	case "starttls", "implicit", "none":
+	default:
+		return Config{}, fmt.Errorf("SMTP_TLS must be starttls, implicit, or none")
+	}
+	if cfg.MailFromAddress == "" {
+		return Config{}, fmt.Errorf("MAIL_FROM_ADDRESS is required")
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") && cfg.EmailProvider == "log" {
+		return Config{}, fmt.Errorf("EMAIL_PROVIDER=log is not allowed when APP_ENV=production")
 	}
 
 	switch cfg.StorageDriver {

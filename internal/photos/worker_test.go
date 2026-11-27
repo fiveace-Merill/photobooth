@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 
 	"github.com/fiveace-Merill/photobooth/internal/photos/store"
 	"github.com/fiveace-Merill/photobooth/internal/platform/database"
@@ -166,3 +167,100 @@ func TestProcessPhotoWorkerSuccess(t *testing.T) {
 }
 
 var _ = uuid.New
+
+func TestProcessPhotoFinalizeHookMarksDiscardedFailed(t *testing.T) {
+	tdb := testdb.Open(t)
+	ctx := context.Background()
+	p1, shoot1 := seedPhotographerShoot(t, ctx, tdb, "discard@p.com", "discard", 10<<20)
+	fake := photostorage.NewFake()
+	svc := NewService(Deps{Pool: tdb.App, Objects: fake, MaxPhotoBytes: 60 << 20, MaxPhotosPerShoot: 500, MaxImageMegapixels: 100})
+	up, err := svc.CreateUpload(ctx, p1, shoot1, CreateUploadInput{Filename: "a.jpg", ContentType: "image/jpeg", SizeBytes: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = database.WithTenant(ctx, tdb.App, pgtype.UUID{Bytes: p1, Valid: true}, func(tx pgx.Tx) error {
+		_, err := store.New(tx).MarkPhotoProcessing(ctx, store.MarkPhotoProcessingParams{PhotographerID: pgtype.UUID{Bytes: p1, Valid: true}, ShootID: pgtype.UUID{Bytes: shoot1, Valid: true}, ID: pgtype.UUID{Bytes: up.PhotoID, Valid: true}})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hook := NewProcessPhotoFinalizeHook(tdb.App)
+	jobRow := &rivertype.JobRow{
+		Kind:        (ProcessPhotoArgs{}).Kind(),
+		State:       rivertype.JobStateDiscarded,
+		EncodedArgs: []byte(`{"photographerId":"` + p1.String() + `","shootId":"` + shoot1.String() + `","photoId":"` + up.PhotoID.String() + `"}`),
+	}
+	retErr := hook.WorkEnd(ctx, jobRow, errors.New("boom"))
+	if retErr == nil || retErr.Error() != "boom" {
+		t.Fatalf("expected passthrough err, got %v", retErr)
+	}
+
+	var status, perr string
+	err = database.WithTenant(ctx, tdb.App, pgtype.UUID{Bytes: p1, Valid: true}, func(tx pgx.Tx) error {
+		p, err := store.New(tx).GetPhoto(ctx, store.GetPhotoParams{PhotographerID: pgtype.UUID{Bytes: p1, Valid: true}, ShootID: pgtype.UUID{Bytes: shoot1, Valid: true}, ID: pgtype.UUID{Bytes: up.PhotoID, Valid: true}})
+		if err != nil {
+			return err
+		}
+		status = p.Status
+		if p.Error.Valid {
+			perr = p.Error.String
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" || perr != PhotoErrProcessingFailed {
+		t.Fatalf("status=%s err=%q", status, perr)
+	}
+}
+
+func TestMarkStaleProcessingPhotos(t *testing.T) {
+	tdb := testdb.Open(t)
+	ctx := context.Background()
+	p1, shoot1 := seedPhotographerShoot(t, ctx, tdb, "stale@p.com", "stale", 10<<20)
+	fake := photostorage.NewFake()
+	svc := NewService(Deps{Pool: tdb.App, Objects: fake, MaxPhotoBytes: 60 << 20, MaxPhotosPerShoot: 500, MaxImageMegapixels: 100})
+	up, err := svc.CreateUpload(ctx, p1, shoot1, CreateUploadInput{Filename: "a.jpg", ContentType: "image/jpeg", SizeBytes: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = database.WithTenant(ctx, tdb.App, pgtype.UUID{Bytes: p1, Valid: true}, func(tx pgx.Tx) error {
+		_, err := store.New(tx).MarkPhotoProcessing(ctx, store.MarkPhotoProcessingParams{PhotographerID: pgtype.UUID{Bytes: p1, Valid: true}, ShootID: pgtype.UUID{Bytes: shoot1, Valid: true}, ID: pgtype.UUID{Bytes: up.PhotoID, Valid: true}})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tdb.Owner.Exec(ctx, `UPDATE photos SET updated_at = now() - interval '31 minutes' WHERE id=$1`, up.PhotoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := MarkStaleProcessingPhotos(ctx, tdb.App)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("n=%d", n)
+	}
+	var status, perr string
+	err = database.WithTenant(ctx, tdb.App, pgtype.UUID{Bytes: p1, Valid: true}, func(tx pgx.Tx) error {
+		p, err := store.New(tx).GetPhoto(ctx, store.GetPhotoParams{PhotographerID: pgtype.UUID{Bytes: p1, Valid: true}, ShootID: pgtype.UUID{Bytes: shoot1, Valid: true}, ID: pgtype.UUID{Bytes: up.PhotoID, Valid: true}})
+		if err != nil {
+			return err
+		}
+		status = p.Status
+		if p.Error.Valid {
+			perr = p.Error.String
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" || perr != PhotoErrProcessingTimedOut {
+		t.Fatalf("status=%s err=%q", status, perr)
+	}
+}

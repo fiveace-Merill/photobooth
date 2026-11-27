@@ -10,6 +10,9 @@ Read this before changing anything in `/migrations` or writing queries. The migr
 | 00002 | `clients`, `shoots` | Client catalogue; shoots with status and due date |
 | 00003 | `photos`, `gallery_links` | R2 object keys; magic-link access for clients |
 | 00004 | `payments`, `payment_callbacks`, `payouts`, `ledger_entries` | Money. Apply when reaching the payments slice |
+| 00005 | `shoot_events`, photo processing fields | Photo processing state/audit events |
+| 00006 | photo processing recovery function | Reaps stale processing photos |
+| 00007 | `notifications` | Delivery email notification records (no body/URL/token) |
 
 ## Rules the schema relies on
 
@@ -42,3 +45,13 @@ Notifications log, reviews/testimonials, expiry job bookkeeping, subscription bi
 - Object keys are ID-only: `p/{photographerId}/{shootId}/{photoId}/{original|preview.jpg|thumb.jpg}`. Never include user text.
 - Upload flow reserves quota atomically (`photographers.storage_used_bytes` checked against plan quota in one UPDATE). Completion verifies object HEAD size equals declared size; mismatch deletes object, releases quota, marks photo failed `size_mismatch`.
 - `shoot_events` is an internal audit log (RLS same tenant policy) for upload/processing/delete events.
+
+## notifications (slice 4)
+
+`notifications` records delivery email attempts/outcomes. It intentionally stores **no message body and no delivery URL/token**.
+
+- Columns: `photographer_id, shoot_id, client_id, channel('email'), kind('delivery_link'), recipient, status('queued'|'sent'|'failed'), provider_message_id, error_code, created_at, sent_at`.
+- Tenant-scoped with composite FKs to `shoots` and `clients`, and RLS copied from tenant tables.
+- `queued` rows are written before SMTP send and updated after the inline send completes.
+- A small periodic River job marks rows stuck in `queued` for >10 minutes as `failed/send_timeout`.
+- Delivery links are sent inline in the create/regenerate request; no background job carries a raw URL/token.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,10 +27,11 @@ func (ProcessPhotoArgs) Kind() string { return "process_photo" }
 
 type ProcessPhotoWorker struct {
 	river.WorkerDefaults[ProcessPhotoArgs]
-	pool    *pgxpool.Pool
-	objects photostorage.ObjectStore
-	maxMP   int
-	logger  *slog.Logger
+	pool      *pgxpool.Pool
+	objects   photostorage.ObjectStore
+	maxMP     int
+	logger    *slog.Logger
+	testDelay time.Duration
 }
 
 func NewProcessPhotoWorker(pool *pgxpool.Pool, objects photostorage.ObjectStore, maxMP int, logger *slog.Logger) *ProcessPhotoWorker {
@@ -37,6 +39,13 @@ func NewProcessPhotoWorker(pool *pgxpool.Pool, objects photostorage.ObjectStore,
 		logger = slog.Default()
 	}
 	return &ProcessPhotoWorker{pool: pool, objects: objects, maxMP: maxMP, logger: logger}
+}
+
+func (w *ProcessPhotoWorker) WithTestDelay(d time.Duration) *ProcessPhotoWorker {
+	if d > 0 {
+		w.testDelay = d
+	}
+	return w
 }
 
 func (w *ProcessPhotoWorker) Work(ctx context.Context, job *river.Job[ProcessPhotoArgs]) error {
@@ -72,6 +81,18 @@ func (w *ProcessPhotoWorker) Work(ctx context.Context, job *river.Job[ProcessPho
 	}
 	if status == "" || status == "ready" {
 		return nil
+	}
+
+	// Test-only delay for kill/recovery verification. Config ignores it in production.
+	if w.testDelay > 0 {
+		w.logger.Info("process_photo test delay", "photo_id", args.PhotoID, "delay", w.testDelay)
+		t := time.NewTimer(w.testDelay)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
 	}
 
 	rc, err := w.objects.Get(ctx, origKey)
