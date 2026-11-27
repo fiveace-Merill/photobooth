@@ -2,10 +2,10 @@ import { formatMoney } from "@/lib/money";
 import { PhotoFrame } from "@/components/delivery/photo-tile";
 
 const photos = [
-  { id: "hero-1", width: 800, height: 1200, previewUrl: "/demo/previews/aleksandra-sapozhnikova.jpg" },
-  { id: "hero-2", width: 1200, height: 801, previewUrl: "/demo/previews/bryan-heng.jpg" },
-  { id: "hero-3", width: 750, height: 1200, previewUrl: "/demo/previews/eren-yildiz.jpg" },
-  { id: "hero-4", width: 1200, height: 800, previewUrl: "/demo/previews/modern-dairy-portraits.jpg" },
+  { id: "hero-1", width: 800, height: 1200, thumbUrl: "/demo/previews/aleksandra-sapozhnikova.jpg", previewUrl: "/demo/previews/aleksandra-sapozhnikova.jpg" },
+  { id: "hero-2", width: 1200, height: 801, thumbUrl: "/demo/previews/bryan-heng.jpg", previewUrl: "/demo/previews/bryan-heng.jpg" },
+  { id: "hero-3", width: 750, height: 1200, thumbUrl: "/demo/previews/eren-yildiz.jpg", previewUrl: "/demo/previews/eren-yildiz.jpg" },
+  { id: "hero-4", width: 1200, height: 800, thumbUrl: "/demo/previews/modern-dairy-portraits.jpg", previewUrl: "/demo/previews/modern-dairy-portraits.jpg" },
 ];
 
 export function HeroPreview() {

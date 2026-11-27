@@ -1,6 +1,14 @@
-import { MockDeliveryApi } from "./mock";
 import type { DeliveryApi } from "./client";
+import { MockDeliveryApi } from "./mock";
+import { RealDeliveryApi } from "./delivery";
 
-// Swap this export to a real fetch-based client later. The rest of the app
-// depends on the DeliveryApi interface only.
-export const deliveryApi: DeliveryApi = new MockDeliveryApi();
+const mock = new MockDeliveryApi();
+const real = new RealDeliveryApi();
+
+export function getDeliveryApi(token: string): DeliveryApi {
+  if (token === "demo" || token === "demo-paid") return mock;
+  if (process.env.USE_MOCK_DELIVERY === "true" || process.env.NEXT_PUBLIC_USE_MOCK_DELIVERY === "true") return mock;
+  return real;
+}
+
+export const deliveryApi: DeliveryApi = mock;

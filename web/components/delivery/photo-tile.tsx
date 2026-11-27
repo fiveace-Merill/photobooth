@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import type { CSSProperties } from "react";
-import type { Photo } from "@/lib/api/types";
+import type { DeliveryPhoto } from "@/lib/api/types";
 
 type Props = {
-  photo: Photo;
+  photo: DeliveryPhoto;
   index: number;
   total: number;
   unlocked: boolean;
@@ -14,6 +13,7 @@ type Props = {
   sizes?: string;
   className?: string;
   interactive?: boolean;
+  onImageError?: () => void;
 };
 
 const TONES: [string, string, string][] = [
@@ -39,9 +39,9 @@ export function PhotoFrame({
   unlocked,
   onOpen,
   priority = false,
-  sizes = "(min-width:1100px) 25vw, (min-width:720px) 33vw, 50vw",
   className = "relative w-full overflow-hidden rounded-[10px] [aspect-ratio:var(--r)]",
   interactive = true,
+  onImageError,
 }: Props) {
   const ratio = photo.width / photo.height;
   const style = {
@@ -52,17 +52,17 @@ export function PhotoFrame({
   const frame = (
     <div className={className} style={style}>
       {photo.previewUrl ? (
-        // All image rendering goes through this one place (PhotoTile/PhotoFrame).
-        // Gallery tiles are labeled by position, not invented descriptions.
-        <Image
+        // Use plain img because preview/thumb URLs may be short-lived presigned R2 URLs.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={photo.previewUrl}
           alt=""
           width={photo.width}
           height={photo.height}
-          sizes={sizes}
-          priority={priority}
-          loading={priority ? undefined : "lazy"}
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
           className="h-full w-full object-cover"
+          onError={onImageError}
         />
       ) : null}
       <div
@@ -71,8 +71,6 @@ export function PhotoFrame({
         data-gone={unlocked ? "true" : "false"}
         style={{
           transitionDelay: unlocked ? `${index * 70}ms` : "0ms",
-          // In production the watermark is baked into the preview file on the server.
-          // This overlay is only a visual stand-in for the prototype/mock.
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='120'%3E%3Ctext x='85' y='66' text-anchor='middle' transform='rotate(-24 85 60)' font-family='sans-serif' font-size='17' font-weight='700' fill='white' fill-opacity='.4'%3EPREVIEW%3C/text%3E%3C/svg%3E\")",
         }}

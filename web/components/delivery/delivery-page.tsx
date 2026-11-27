@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Delivery } from "@/lib/api/types";
-import { deliveryApi } from "@/lib/api";
+import { getDeliveryApi } from "@/lib/api";
 import { normalizeKenyanPhone } from "@/lib/phone";
 import { StatusBanner } from "./status-banner";
 import { GalleryGrid } from "./gallery-grid";
@@ -24,30 +24,32 @@ export function DeliveryPage({ delivery: initialDelivery, token }: Props) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [payment, dispatch] = useReducer(paymentReducer, initialPaymentState);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const imageRetryRef = useRef(false);
   const unlocked = delivery.status === "unlocked";
+  const api = getDeliveryApi(token);
+  const manual = delivery.features.payments === "manual";
+
+  const refetch = useCallback(async () => {
+    const fresh = await api.getDelivery(token);
+    if (fresh) setDelivery(fresh);
+  }, [api, token]);
+
+  const onImageError = useCallback(() => {
+    if (imageRetryRef.current) return;
+    imageRetryRef.current = true;
+    void refetch().finally(() => { imageRetryRef.current = false; });
+  }, [refetch]);
 
   useEffect(() => {
-    if (payment.status !== "waiting" || !payment.paymentId) return;
+    if (manual || payment.status !== "waiting" || !payment.paymentId || !api.getPaymentStatus) return;
 
     pollRef.current = setInterval(async () => {
       try {
-        const result = await deliveryApi.getPaymentStatus(token, payment.paymentId!);
+        const result = await api.getPaymentStatus!(token, payment.paymentId!);
         if (result.status === "succeeded") {
           if (pollRef.current) clearInterval(pollRef.current);
           dispatch({ type: "SUCCEEDED" });
-          const fresh = await deliveryApi.getDelivery(token === "demo" ? "demo-paid" : token);
-          if (fresh && fresh.status === "unlocked") {
-            setDelivery(fresh);
-          } else if (delivery.status === "preview") {
-            // Mock fallback: unlock locally only if server-shaped unlocked data unavailable.
-            setDelivery({
-              ...delivery,
-              status: "unlocked",
-              downloadAllUrl: `/mock/downloads/${token}.zip`,
-              totalOriginalBytes: 96 * 1024 * 1024,
-              photos: delivery.photos.map((p) => ({ ...p, originalUrl: `/mock/originals/${p.id}.jpg` })),
-            });
-          }
+          await refetch();
           const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
           window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
           toast("Payment received. Your photos are unlocked.");
@@ -62,18 +64,18 @@ export function DeliveryPage({ delivery: initialDelivery, token }: Props) {
       }
     }, 1200);
 
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [payment.status, payment.paymentId, token, delivery]);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [manual, payment.status, payment.paymentId, token, api, refetch]);
 
   function openPayment() {
+    if (manual) return;
     dispatch({ type: "OPEN" });
   }
 
   async function submitPayment(phone: string) {
+    if (manual || !api.startPayment) return;
     const normalized = normalizeKenyanPhone(phone);
-    const result = await deliveryApi.startPayment(token, normalized);
+    const result = await api.startPayment(token, normalized);
     dispatch({ type: "SUBMIT", phone, paymentId: result.paymentId });
   }
 
@@ -92,26 +94,23 @@ export function DeliveryPage({ delivery: initialDelivery, token }: Props) {
         </header>
 
         <main>
-          <GalleryGrid
-            photos={delivery.photos}
-            unlocked={unlocked}
-            onOpen={(i) => setViewerIndex(i)}
-          />
+          <GalleryGrid photos={delivery.photos} unlocked={unlocked} onOpen={(i) => setViewerIndex(i)} onImageError={onImageError} />
 
-          {unlocked ? (
+          {unlocked && delivery.features.reviews ? (
             <ReviewCard
+              studioName={delivery.studioName}
               onSubmit={async (rating, comment) => {
-                await deliveryApi.submitReview(token, rating, comment);
+                await api.submitReview?.(token, rating, comment);
               }}
             />
           ) : null}
 
-          <details className="my-8 max-w-[560px] rounded-[10px] border border-dashed border-border p-3 text-sm text-muted-foreground">
-            <summary className="cursor-pointer">Prototype controls</summary>
-            <p className="mt-2 mb-0">
-              Use a phone number ending in 000 to test the payment failure path. Any other valid Safaricom number succeeds after ~3 seconds.
-            </p>
-          </details>
+          {!manual && delivery.features.payments === "mpesa" ? (
+            <details className="my-8 max-w-[560px] rounded-[10px] border border-dashed border-border p-3 text-sm text-muted-foreground">
+              <summary className="cursor-pointer">Prototype controls</summary>
+              <p className="mt-2 mb-0">Use a phone number ending in 000 to test the payment failure path. Any other valid Safaricom number succeeds after ~3 seconds.</p>
+            </details>
+          ) : null}
         </main>
 
         <footer className="py-8 text-sm text-muted-foreground">
@@ -121,40 +120,28 @@ export function DeliveryPage({ delivery: initialDelivery, token }: Props) {
         </footer>
       </div>
 
-      <ActionBar
-        delivery={delivery}
-        onPrimary={() => {
-          if (delivery.status === "preview") openPayment();
-          else toast("Preparing your zip file…");
-        }}
-      />
+      <ActionBar delivery={delivery} onPrimary={openPayment} />
 
       <PhotoViewer
         photos={delivery.photos}
         index={viewerIndex}
         unlocked={unlocked}
         onClose={() => setViewerIndex(null)}
-        onPrev={() =>
-          setViewerIndex((i) =>
-            i === null ? null : (i + delivery.photos.length - 1) % delivery.photos.length,
-          )
-        }
-        onNext={() =>
-          setViewerIndex((i) => (i === null ? null : (i + 1) % delivery.photos.length))
-        }
+        onPrev={() => setViewerIndex((i) => i === null ? null : (i + delivery.photos.length - 1) % delivery.photos.length)}
+        onNext={() => setViewerIndex((i) => i === null ? null : (i + 1) % delivery.photos.length)}
+        onImageError={onImageError}
       />
 
-      <PaySheet
-        delivery={delivery}
-        state={payment}
-        onClose={() => {
-          if (pollRef.current) clearInterval(pollRef.current);
-          dispatch({ type: "CLOSE" });
-        }}
-        onPhoneChange={(phone) => dispatch({ type: "SET_PHONE", phone })}
-        onSubmit={submitPayment}
-        onRetry={() => dispatch({ type: "RETRY" })}
-      />
+      {!manual ? (
+        <PaySheet
+          delivery={delivery}
+          state={payment}
+          onClose={() => { if (pollRef.current) clearInterval(pollRef.current); dispatch({ type: "CLOSE" }); }}
+          onPhoneChange={(phone) => dispatch({ type: "SET_PHONE", phone })}
+          onSubmit={submitPayment}
+          onRetry={() => dispatch({ type: "RETRY" })}
+        />
+      ) : null}
     </div>
   );
 }

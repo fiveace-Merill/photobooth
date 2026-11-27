@@ -1,37 +1,31 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { Photo } from "@/lib/api/types";
+import type { DeliveryPhoto, UnlockedDeliveryPhoto } from "@/lib/api/types";
 import { photoPlaceholderBackground } from "./photo-tile";
 
 type Props = {
-  photos: Photo[];
+  photos: Array<DeliveryPhoto | UnlockedDeliveryPhoto>;
   index: number | null;
   unlocked: boolean;
   onClose: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onImageError: () => void;
 };
 
-export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext }: Props) {
+export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext, onImageError }: Props) {
   const open = index !== null;
   const current = index !== null ? photos[index] : null;
 
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        onPrev();
-      }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        onNext();
-      }
+      if (e.key === "ArrowLeft") { e.preventDefault(); onPrev(); }
+      if (e.key === "ArrowRight") { e.preventDefault(); onNext(); }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -52,18 +46,19 @@ export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext }
       >
         <DialogTitle className="sr-only">Photo viewer</DialogTitle>
         <div className="grid place-items-center p-4">
-          <div
-            className="relative w-[min(100%,calc(66dvh*var(--r)))] overflow-hidden rounded-[10px] [aspect-ratio:var(--r)]"
-            style={style}
-          >
+          <div className="relative w-[min(100%,calc(66dvh*var(--r)))] overflow-hidden rounded-[10px] [aspect-ratio:var(--r)]" style={style}>
             {current?.previewUrl ? (
-              <Image
+              // Plain img for presigned/short-lived R2 URLs.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
                 src={current.previewUrl}
                 alt=""
                 width={current.width}
                 height={current.height}
-                sizes="(min-width: 920px) 920px, 96vw"
+                loading="eager"
+                decoding="async"
                 className="h-full w-full object-cover"
+                onError={onImageError}
               />
             ) : null}
             <div
@@ -71,8 +66,6 @@ export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext }
               className="pointer-events-none absolute inset-0 transition-opacity duration-[800ms] ease-out data-[gone=true]:opacity-0 motion-reduce:transition-none"
               data-gone={unlocked ? "true" : "false"}
               style={{
-                // In production the watermark is baked into the preview file on the server.
-                // This overlay is only a visual stand-in for the prototype/mock.
                 backgroundImage:
                   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='120'%3E%3Ctext x='85' y='66' text-anchor='middle' transform='rotate(-24 85 60)' font-family='sans-serif' font-size='17' font-weight='700' fill='white' fill-opacity='.4'%3EPREVIEW%3C/text%3E%3C/svg%3E\")",
               }}
@@ -80,22 +73,17 @@ export function PhotoViewer({ photos, index, unlocked, onClose, onPrev, onNext }
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 pt-2">
-          <span className="text-sm text-foreground">
-            {index !== null ? `Photo ${index + 1} of ${photos.length}` : ""}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            {unlocked ? "Original quality" : "Preview with watermark"}
-          </span>
+          <span className="text-sm text-foreground">{index !== null ? `Photo ${index + 1} of ${photos.length}` : ""}</span>
+          <span className="text-sm text-muted-foreground">{unlocked ? "Original quality" : "Preview with watermark"}</span>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="min-h-11 rounded-full px-4" onClick={onPrev} aria-label="Previous photo">
-              Previous
-            </Button>
-            <Button type="button" variant="outline" className="min-h-11 rounded-full px-4" onClick={onNext} aria-label="Next photo">
-              Next
-            </Button>
-            <Button type="button" variant="outline" className="min-h-11 rounded-full px-4" onClick={onClose}>
-              Close
-            </Button>
+            {unlocked && current && "originalUrl" in current && typeof current.originalUrl === "string" ? (
+              <Button variant="outline" className="min-h-11 rounded-full px-4" onClick={() => { window.location.href = current.originalUrl as string; }}>
+                Download
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" className="min-h-11 rounded-full px-4" onClick={onPrev} aria-label="Previous photo">Previous</Button>
+            <Button type="button" variant="outline" className="min-h-11 rounded-full px-4" onClick={onNext} aria-label="Next photo">Next</Button>
+            <Button type="button" variant="outline" className="min-h-11 rounded-full px-4" onClick={onClose}>Close</Button>
           </div>
         </div>
       </DialogContent>

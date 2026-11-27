@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 type Props = {
-  onSubmit: (rating: number, comment: string) => Promise<void>;
+  studioName: string;
+  onSubmit?: (rating: number, comment: string) => Promise<void>;
 };
 
-export function ReviewCard({ onSubmit }: Props) {
+export function ReviewCard({ studioName, onSubmit }: Props) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [sent, setSent] = useState(false);
@@ -17,7 +18,7 @@ export function ReviewCard({ onSubmit }: Props) {
     return (
       <section className="mt-12 mb-4 max-w-[560px] rounded-[14px] border border-border bg-card p-6" aria-labelledby="rv-h">
         <h2 id="rv-h" className="m-0 text-2xl font-semibold tracking-[-0.01em]">Thank you</h2>
-        <p className="mt-2 m-0 text-muted-foreground">Your review was sent to Wanjiru.</p>
+        <p className="mt-2 m-0 text-muted-foreground">Your review was sent to {studioName}.</p>
       </section>
     );
   }
@@ -26,7 +27,7 @@ export function ReviewCard({ onSubmit }: Props) {
     <section className="mt-12 mb-4 max-w-[560px] rounded-[14px] border border-border bg-card p-6" aria-labelledby="rv-h">
       <div>
         <h2 id="rv-h" className="m-0 text-2xl font-semibold tracking-[-0.01em]">How was your experience?</h2>
-        <p className="mt-1 mb-4 text-muted-foreground">Your review helps Wanjiru reach more clients.</p>
+        <p className="mt-1 mb-4 text-muted-foreground">Your review helps {studioName} reach more clients.</p>
         <div className="mb-4 flex gap-1" role="group" aria-label="Rating">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
@@ -46,7 +47,7 @@ export function ReviewCard({ onSubmit }: Props) {
         </div>
         <Textarea
           aria-label="Your review"
-          placeholder="Tell Wanjiru what you liked (optional)"
+          placeholder={`Tell ${studioName} what you liked (optional)`}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           className="mb-4 min-h-[84px] rounded-[10px] bg-background"
@@ -56,7 +57,7 @@ export function ReviewCard({ onSubmit }: Props) {
           className="min-h-12 rounded-full px-6 text-base font-bold"
           disabled={rating === 0}
           onClick={async () => {
-            await onSubmit(rating, comment);
+            await onSubmit?.(rating, comment);
             setSent(true);
           }}
         >

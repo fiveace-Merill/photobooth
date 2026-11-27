@@ -1,5 +1,11 @@
 import type { Delivery } from "@/lib/api/types";
 
+function formatDate(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" });
+}
+
 export function StatusBanner({ delivery }: { delivery: Delivery }) {
   if (delivery.status === "preview") {
     return (
@@ -17,7 +23,7 @@ export function StatusBanner({ delivery }: { delivery: Delivery }) {
         Unlocked
       </span>
       <p className="m-0 text-base leading-relaxed text-foreground">
-        Your photos are ready in original quality. This link works until {delivery.expiresAt}, so download them before then.
+        Your photos are ready in original quality. This link works until {formatDate(delivery.expiresAt)}, so download them before then.
       </p>
     </div>
   );

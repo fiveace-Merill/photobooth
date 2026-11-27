@@ -1,39 +1,47 @@
 // Shared delivery types. Money is integer minor units (KES cents), never floats.
 
-export type Photo = {
+export type DeliveryPhoto = {
   id: string;
   width: number;
   height: number;
-  previewUrl: string | null;
+  thumbUrl: string;
+  previewUrl: string;
 };
 
-export type PreviewPhoto = Photo;
+export type PreviewDeliveryPhoto = DeliveryPhoto;
 
-export type UnlockedPhoto = Photo & {
+export type UnlockedDeliveryPhoto = DeliveryPhoto & {
   originalUrl: string;
+};
+
+export type DeliveryFeatures = {
+  payments: "manual" | "mpesa";
+  reviews: boolean;
 };
 
 type DeliveryBase = {
   studioName: string;
+  studioPhone: string | null;
   title: string;
   shotOn: string;
   priceMinor: number;
   currency: "KES";
   expiresAt: string;
+  features: DeliveryFeatures;
 };
 
 // SECURITY RULE: PreviewDelivery must NOT contain any original or download URLs.
 // The browser must never receive originals before payment is verified server-side.
 export type PreviewDelivery = DeliveryBase & {
   status: "preview";
-  photos: PreviewPhoto[];
+  photos: PreviewDeliveryPhoto[];
 };
 
 export type UnlockedDelivery = DeliveryBase & {
   status: "unlocked";
   downloadAllUrl: string;
   totalOriginalBytes: number;
-  photos: UnlockedPhoto[];
+  photos: UnlockedDeliveryPhoto[];
 };
 
 export type Delivery = PreviewDelivery | UnlockedDelivery;
