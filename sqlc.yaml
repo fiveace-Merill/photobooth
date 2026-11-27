@@ -47,4 +47,26 @@ sql:
         sql_package: pgx/v5
         emit_json_tags: false
 
+  - name: deliveries
+    engine: postgresql
+    schema: migrations
+    queries: internal/deliveries/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/deliveries/store
+        sql_package: pgx/v5
+        emit_json_tags: false
+
   # - name: tenant    -> internal/tenant/queries.sql    -> internal/tenant/store
+
+  - name: notify
+    engine: postgresql
+    schema: migrations
+    queries: internal/notify/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/notify/store
+        sql_package: pgx/v5
+        emit_json_tags: false

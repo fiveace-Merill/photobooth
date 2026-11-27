@@ -12,3 +12,7 @@ This file tracks placeholder content that must be replaced before a public launc
 | Draft privacy policy text | `web/app/(marketing)/privacy/page.tsx` | Legally reviewed privacy policy | Page is marked DRAFT pending legal review. |
 | Demo delivery links/content | `web/lib/site.ts` (`DEMO_PATH`), `web/lib/api/mock.ts` | Real gallery links and API data | Demo route `/g/demo` is intentional for marketing; keep `noindex` on client route group. |
 | Temporary stock/demo images | `web/public/demo/`, `web/public/images/`, `docs/image-credits.md` | Licensed/owned production images with confirmed credits | Stock Unsplash images are temporary; previews generated in `web/public/demo/previews/`; originals used only by unlocked mock data. |
+
+| Placeholder sender address `no-reply@photobooth.local` | `.env.example`, local email config | Real verified sending address/domain | Used as `MAIL_FROM_ADDRESS`; must be a domain controlled by Photobooth. Real inbox delivery/spam placement need real provider/domain. |
+| Placeholder sender name `Photobooth` | `.env.example`, email config | Final product sender name | Used in `"{Studio} via {MAIL_FROM_NAME}"` From header. |
+| Local Mailpit SMTP/UI | `docker-compose.yml`, `.env.example` | Real email provider (SMTP/API) and verified domain | Mailpit is for local testing only; open `http://localhost:8025`. |

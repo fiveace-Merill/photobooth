@@ -54,6 +54,7 @@ make check                    # gofmt -w + go vet + go test ./...
 ## SQL, secrets, retention
 - All SQL lives in sqlc `queries.sql` files — no raw or string-concatenated SQL in Go. Multi-table writes use transactions. Schema changes only via a new goose migration with a working `Down`; never edit an applied migration.
 - Never commit secrets or `.env`; keep `.env.example` current. Never log tokens, full phone numbers or payment credentials. Session, gallery-link and access-code tokens are stored hashed, long, random and expiring. Validate upload type/size; presigned upload URLs are short-lived and scoped to one object key. Originals are untouched; clients see generated previews only.
+- Never persist or log a delivery token or URL. Delivery links are sent inline, never from a background job.
 - Never put an original's URL or key in any response served to clients before unlock. Storage keys never contain user text.
 - Photo files, including previews and thumbnails, expire per plan: warn the client first, then delete. Keep client records, pending bills and approved testimonials (Kenya Data Protection Act).
 

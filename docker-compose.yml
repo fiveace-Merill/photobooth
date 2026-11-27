@@ -19,5 +19,12 @@ services:
       # Runs once, on first start with an empty volume: creates the app role.
       - ./db/init:/docker-entrypoint-initdb.d:ro
 
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI at http://localhost:8025
+
 volumes:
   pgdata:

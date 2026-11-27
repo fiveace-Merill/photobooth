@@ -45,6 +45,21 @@ type LedgerEntry struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type Notification struct {
+	ID                pgtype.UUID
+	PhotographerID    pgtype.UUID
+	ShootID           pgtype.UUID
+	ClientID          pgtype.UUID
+	Channel           string
+	Kind              string
+	Recipient         string
+	Status            string
+	ProviderMessageID pgtype.Text
+	ErrorCode         pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	SentAt            pgtype.Timestamptz
+}
+
 type Payment struct {
 	ID                 pgtype.UUID
 	PhotographerID     pgtype.UUID
