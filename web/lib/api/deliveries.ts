@@ -20,9 +20,18 @@ export type ShootDeliveryState = {
   events: ShootDeliveryEvent[];
 };
 
+export type DeliveryNotification = {
+  channel: "email";
+  status: "queued" | "sent" | "failed";
+  createdAt?: string;
+  errorCode?: string | null;
+  recipient?: string;
+};
+
 export type CreateDeliveryLinkResult = {
   url: string;
   expiresAt: string;
+  notifications?: DeliveryNotification[];
 };
 
 export type MarkPaidInput = {
@@ -30,16 +39,46 @@ export type MarkPaidInput = {
   note?: string;
 };
 
+export type SendDeliveryOptions = {
+  send?: { email: boolean };
+};
+
+export type DeliveryMessagePreview = {
+  subject: string;
+  bodyText: string;
+  recipientMasked: string;
+  emailsRemainingToday: number;
+  availability: {
+    email: { available: boolean; reason?: string };
+  };
+};
+
+export type ShootNotificationsResult = {
+  items: Array<{
+    channel: "email";
+    status: "queued" | "sent" | "failed";
+    createdAt: string;
+    errorCode?: string | null;
+    recipient: string;
+  }>;
+};
+
 export function getShootDelivery(shootId: string): Promise<ApiResult<ShootDeliveryState>> {
   return apiRequest<ShootDeliveryState>(`/api/v1/shoots/${shootId}/delivery`, { method: "GET" }, { server: false });
 }
 
-export function deliverShoot(shootId: string): Promise<ApiResult<CreateDeliveryLinkResult>> {
-  return apiRequest<CreateDeliveryLinkResult>(`/api/v1/shoots/${shootId}/deliver`, { method: "POST" }, { server: false });
+export function deliverShoot(
+  shootId: string,
+  input: SendDeliveryOptions = {},
+): Promise<ApiResult<CreateDeliveryLinkResult>> {
+  return apiRequest<CreateDeliveryLinkResult>(`/api/v1/shoots/${shootId}/deliver`, { method: "POST", body: JSON.stringify(input) }, { server: false });
 }
 
-export function regenerateShootLink(shootId: string): Promise<ApiResult<CreateDeliveryLinkResult>> {
-  return apiRequest<CreateDeliveryLinkResult>(`/api/v1/shoots/${shootId}/link/regenerate`, { method: "POST" }, { server: false });
+export function regenerateShootLink(
+  shootId: string,
+  input: SendDeliveryOptions = {},
+): Promise<ApiResult<CreateDeliveryLinkResult>> {
+  return apiRequest<CreateDeliveryLinkResult>(`/api/v1/shoots/${shootId}/link/regenerate`, { method: "POST", body: JSON.stringify(input) }, { server: false });
 }
 
 export function revokeShootLink(shootId: string): Promise<ApiResult<void>> {
@@ -48,4 +87,12 @@ export function revokeShootLink(shootId: string): Promise<ApiResult<void>> {
 
 export function markShootPaid(shootId: string, input: MarkPaidInput): Promise<ApiResult<void>> {
   return apiRequest<void>(`/api/v1/shoots/${shootId}/mark-paid`, { method: "POST", body: JSON.stringify(input) }, { server: false });
+}
+
+export function getShootNotifications(shootId: string): Promise<ApiResult<ShootNotificationsResult>> {
+  return apiRequest<ShootNotificationsResult>(`/api/v1/shoots/${shootId}/notifications`, { method: "GET" }, { server: false });
+}
+
+export function getShootDeliveryMessagePreview(shootId: string): Promise<ApiResult<DeliveryMessagePreview>> {
+  return apiRequest<DeliveryMessagePreview>(`/api/v1/shoots/${shootId}/delivery/message-preview`, { method: "GET" }, { server: false });
 }

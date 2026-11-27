@@ -113,7 +113,7 @@ export function ShootDetail({ shoot, client }: { shoot: Shoot; client: Client | 
         </div>
 
         <div className="space-y-6">
-          <ShootDeliveryPanel shootId={shoot.id} shootStatus={shoot.status} priceMinor={shoot.priceMinor} />
+          <ShootDeliveryPanel shootId={shoot.id} shootStatus={shoot.status} priceMinor={shoot.priceMinor} clientEmail={client?.email} clientId={shoot.clientId} />
           <Card>
             <CardHeader><CardTitle className="text-base">Client</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">

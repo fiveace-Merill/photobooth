@@ -37,6 +37,10 @@ const messages: Record<string, string> = {
   not_delivered: "This shoot has not been delivered yet.",
   originals_locked: "Originals are locked until payment is confirmed.",
   rate_limited: "Too many requests. Please wait a moment and try again.",
+  channel_unavailable: "Client email is unavailable. Add or fix their email address.",
+  too_many_sends: "Too many delivery emails were sent for this shoot recently. Try again later.",
+  email_daily_limit_reached: "You've reached today's email limit. Try again tomorrow.",
+  email_unavailable: "Email delivery is not configured right now.",
   internal: "Something went wrong. Please try again.",
 };
 
