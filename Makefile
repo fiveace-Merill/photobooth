@@ -37,10 +37,13 @@ run: ## Run the API
 seed: ## Seed demo data (refuses APP_ENV=production)
 	go run ./scripts/seed
 
+admin: ## Run admin CLI: make admin ARGS="admin create --email you@example.com"
+	go run ./cmd/admin $(ARGS)
+
 r2check: ## Smoke-check R2 credentials/bucket (requires R2_* env)
 	go run ./scripts/r2check
 
-photo-kill-test: ## Reproducible kill -9 recovery test for process_photo (needs DB+R2+SIGNUP_ENABLED)
+photo-kill-test: ## Reproducible kill -9 recovery test for process_photo (needs DB+R2+SIGNUP_MODE)
 	./scripts/photo-kill-test
 
 test: ## Run all tests

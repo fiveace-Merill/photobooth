@@ -55,3 +55,20 @@ Notifications log, reviews/testimonials, expiry job bookkeeping, subscription bi
 - `queued` rows are written before SMTP send and updated after the inline send completes.
 - A small periodic River job marks rows stuck in `queued` for >10 minutes as `failed/send_timeout`.
 - Delivery links are sent inline in the create/regenerate request; no background job carries a raw URL/token.
+
+## 00008 — Invitations
+
+- `invitations` is a platform auth table (no `photographer_id` tenant ownership, no RLS). Only `internal/auth` should read/write it. It stores only `token_hash` (SHA-256, 32 bytes), never the raw invitation token.
+- Invitations are bound to one email and one plan, single-use, and expiring. State is derived from `used_at`, `revoked_at`, and `expires_at`; invalid/used/expired/revoked tokens are indistinguishable to public endpoints.
+- A partial unique index enforces one active (unused, unrevoked) invitation per email. `CreateInvitation` revokes expired active-state rows for the same email before inserting a replacement.
+
+## 00009 — Admin platform
+
+- `admins`, `admin_sessions`, `admin_recovery_codes`, `waitlist_entries`, and `admin_audit_log` are platform control-plane tables: no `photographer_id`, no RLS. Only admin/waitlist platform code should read/write them. Admin access to tenant data is limited to aggregate-only SECURITY DEFINER functions.
+- `admin_sessions` stores only token hash (SHA-256, 32 bytes). Sessions have `pending` (password ok, 2FA not complete), idle timeout, and absolute max lifetime. Expired/idle sessions are rejected.
+- `admin_recovery_codes` stores only `code_hash`; codes are shown once at TOTP confirmation. Consumed codes cannot be reused.
+- `waitlist_entries` stores consent timestamp/version and normalized contact (email or Kenyan phone). Public submissions must not create a duplicate oracle. Phone-only entries can be invited after admin supplies email.
+- `admin_audit_log` is append-only (trigger rejects UPDATE/DELETE). Every state-changing admin action writes one audit row in the same transaction. Meta must contain masked values only and never tokens, invite URLs, or full contact details.
+- `photographers` gained `last_login_at`, `suspended_at`, `suspended_reason`. Suspended photographers cannot log in and existing sessions stop working; delivery links for their clients continue to work until expiry.
+- `invitations.created_by` now references `admins(id)` with `ON DELETE SET NULL`.
+- SECURITY DEFINER functions: `admin_platform_stats()` and `admin_photographer_usage(uuid[])` return aggregate counts only; EXECUTE revoked from PUBLIC and granted to `photobooth_app`; `search_path` fixed to `public`.

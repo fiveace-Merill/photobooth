@@ -34,16 +34,29 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-foreground">What we collect</h2>
             <p className="mt-3">
-              When you request early access, we collect the information you submit: your name, contact
-              details, photography type, shoots per month, and consent to be contacted. We also collect
-              basic technical information needed to operate the website securely.
+              When you request early access through the form, we collect the information you submit:
+              your name, email address or phone number, main photography type, how many shoots you do
+              per month, and your consent to be contacted. We also collect basic technical information
+              needed to operate the website securely, such as request and abuse-prevention logs.
             </p>
           </section>
           <section>
             <h2 className="text-xl font-semibold text-foreground">How we use it</h2>
             <p className="mt-3">
-              We use early-access information to contact you about Photobooth, understand photographer
-              needs, and plan invites. We do not sell your personal information.
+              We use this information to contact you about Photobooth early access, plan invites,
+              understand photographer needs, and keep the form secure. We do not sell your personal
+              information.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-xl font-semibold text-foreground">Early-access requests and deletion</h2>
+            <p className="mt-3">
+              You can ask us to update or delete your early-access information by contacting{" "}
+              <a href={`mailto:${site.contactEmail}`} className="text-foreground underline underline-offset-4">
+                {site.contactEmail}
+              </a>
+              . We will handle deletion requests in line with applicable law and our internal record-keeping
+              obligations.
             </p>
           </section>
           <section>

@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
-	"strings"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -17,12 +16,17 @@ import (
 )
 
 type Handler struct {
-	svc     *Service
-	limiter *ipLimiter
+	svc            *Service
+	limiter        *ipLimiter
+	trustedProxies []netip.Prefix
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc, limiter: newIPLimiter(30, time.Minute)}
+func NewHandler(svc *Service, trustedProxies ...[]netip.Prefix) *Handler {
+	var tp []netip.Prefix
+	if len(trustedProxies) > 0 {
+		tp = append([]netip.Prefix(nil), trustedProxies[0]...)
+	}
+	return &Handler{svc: svc, limiter: newIPLimiter(30, time.Minute), trustedProxies: tp}
 }
 
 func (h *Handler) Register(mux *http.ServeMux, requireAuth func(http.HandlerFunc) http.HandlerFunc) {
@@ -273,7 +277,7 @@ func writePublicErr(w http.ResponseWriter, err error) {
 
 func (h *Handler) rateLimit(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := h.clientIP(r)
 		if !h.limiter.allow(ip) {
 			setPublicHeaders(w)
 			httpx.ErrorCode(w, http.StatusTooManyRequests, "rate_limited", "Too many requests")
@@ -313,14 +317,6 @@ func (l *ipLimiter) allow(ip string) bool {
 	return true
 }
 
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
+func (h *Handler) clientIP(r *http.Request) string {
+	return httpx.ClientIP(r, h.trustedProxies)
 }

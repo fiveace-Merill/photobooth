@@ -14,6 +14,8 @@ import (
 
 	"github.com/riverqueue/river"
 
+	"github.com/fiveace-Merill/photobooth/internal/admin"
+	adminstore "github.com/fiveace-Merill/photobooth/internal/admin/store"
 	"github.com/fiveace-Merill/photobooth/internal/auth"
 	authstore "github.com/fiveace-Merill/photobooth/internal/auth/store"
 	"github.com/fiveace-Merill/photobooth/internal/clients"
@@ -25,6 +27,8 @@ import (
 	"github.com/fiveace-Merill/photobooth/internal/platform/database"
 	"github.com/fiveace-Merill/photobooth/internal/shoots"
 	photostorage "github.com/fiveace-Merill/photobooth/internal/storage"
+	"github.com/fiveace-Merill/photobooth/internal/waitlist"
+	waitliststore "github.com/fiveace-Merill/photobooth/internal/waitlist/store"
 )
 
 func main() {
@@ -100,8 +104,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	authSvc := auth.NewService(authstore.New(pool), cfg.SignupEnabled)
-	authHandler := auth.NewHandler(authSvc, cfg.CookieSecure)
+	authSvc := auth.NewService(authstore.New(pool), pool, cfg.SignupMode)
+	authHandler := auth.NewHandler(authSvc, cfg.CookieSecure, cfg.SignupMode, cfg.TrustedProxyCIDRs)
 	authMiddleware := auth.NewMiddleware(authSvc, cfg.CookieSecure)
 
 	clientsSvc := clients.NewService(pool)
@@ -131,8 +135,18 @@ func main() {
 		slog.Error("init notify service", "err", err)
 		os.Exit(1)
 	}
+	emailSender, err := notify.NewSenderFromConfig(notify.FactoryConfig{AppEnv: cfg.AppEnv, EmailProvider: cfg.EmailProvider, SMTPHost: cfg.SMTPHost, SMTPPort: cfg.SMTPPort, SMTPUser: cfg.SMTPUser, SMTPPassword: cfg.SMTPPassword, SMTPTLS: cfg.SMTPTLS, MailFromAddress: cfg.MailFromAddress, MailFromName: cfg.MailFromName, EmailDailyLimitPerPhotographer: cfg.EmailDailyLimitPerPhotographer}, slog.Default())
+	if err != nil {
+		slog.Error("init email sender", "err", err)
+		os.Exit(1)
+	}
 	deliveriesSvc := deliveries.NewService(pool, store, cfg.PublicAppURL, deliveries.NewNotifyAdapter(notifySvc))
-	deliveriesHandler := deliveries.NewHandler(deliveriesSvc)
+	deliveriesHandler := deliveries.NewHandler(deliveriesSvc, cfg.TrustedProxyCIDRs)
+	waitlistSvc := waitlist.NewService(waitliststore.New(pool), pool)
+	waitlistHandler := waitlist.NewHandler(waitlistSvc, cfg.TrustedProxyCIDRs)
+	adminSvc := admin.NewService(pool, adminstore.New(pool), cfg.AdminTOTPEncKey, cfg.AdminRequire2FA, cfg.AdminSessionIdleMinutes, cfg.AdminSessionMaxHours)
+	adminMW := admin.NewMiddleware(adminSvc, cfg.CookieSecure, cfg.AdminAllowedIPs, cfg.TrustedProxyCIDRs)
+	adminHandler := admin.NewHandler(adminSvc, waitlistSvc, emailSender, cfg.MailFromName, cfg.MailFromAddress, cfg.PublicAppURL, cfg.CookieSecure, cfg.TrustedProxyCIDRs)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +163,8 @@ func main() {
 	deliveriesHandler.Register(mux, func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) { auth.RequireAuth(http.HandlerFunc(h)).ServeHTTP(w, r) }
 	})
+	waitlistHandler.Register(mux)
+	adminHandler.Register(mux, adminMW)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

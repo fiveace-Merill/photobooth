@@ -32,9 +32,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.1 // indirect
 	github.com/aws/smithy-go v1.28.10 // indirect
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
+	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/riverqueue/river/riverdriver v0.51.2 // indirect
 	github.com/riverqueue/river/rivershared v0.51.2 // indirect
 	github.com/tidwall/gjson v1.20.0 // indirect
@@ -43,5 +45,6 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/term v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 )

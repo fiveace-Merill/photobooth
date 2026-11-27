@@ -14,10 +14,12 @@ Some errors include extra fields (documented below).
 
 ## Auth
 
-- `POST /api/v1/auth/signup` - `{email,password,business_name,slug}`. 201 auth response; 403 `signup_closed`; 409 `email_taken`/`slug_taken`.
+- `POST /api/v1/auth/signup` - `{email,password,business_name,slug,inviteToken?}`. 201 auth response; 403 `signup_closed` when `SIGNUP_MODE=closed`; 404 `invite_invalid` for missing/invalid/expired/revoked/used invite or email mismatch (uniform response); 409 `email_taken`/`slug_taken`. In `invite` mode the invite token is required, email must match the invitation, and plan comes from the invitation. In `open` mode `inviteToken` is ignored.
 - `POST /api/v1/auth/login` - `{email,password}`. 200 auth response; 401 `invalid_credentials`.
 - `POST /api/v1/auth/logout` - 204.
 - `GET /api/v1/auth/me` - 200 `{id,email,business_name,slug,plan_id}`.
+- `GET /api/v1/auth/config` - 200 `{signupMode}`.
+- `GET /api/v1/auth/invitations/{token}` - public, IP-rate-limited. 200 `{email,expiresAt}`; 404 `invite_invalid` with identical body for invalid/expired/revoked/used. Headers: `Cache-Control: no-store`, `Referrer-Policy: no-referrer`.
 
 ## Clients
 
@@ -150,7 +152,8 @@ Aborts upload if uploading; deletes DB row and releases quota exactly once; best
 | `invalid_status_transition` | 422 | Status not allowed for photographer/API |
 | `invalid_content_type` | 415 | State-changing request missing JSON content type |
 | `invalid_origin` | 403 | Cross-site Origin rejected |
-| `signup_closed` | 403 | Public signup disabled |
+| `signup_closed` | 403 | Public signup disabled/closed |
+| `invite_invalid` | 404 | Invitation missing/invalid/expired/revoked/used or email mismatch (uniform) |
 | `internal` | 500 | Unexpected server error |
 | `unsupported_type` | 415 | Photo content type not jpeg/png/webp |
 | `file_too_large` | 413 | Photo exceeds MAX_PHOTO_BYTES |
@@ -316,3 +319,60 @@ Checks unlock on every request. `403 originals_locked` when locked. When unlocke
 Unlocked only. Streams a ZIP (`application/zip`) with `Store` (no compression) directly from R2 without buffering whole files/ZIP. Filename is sanitized shoot title. Logs `delivery_download_all` event.
 
 Limits/honesty: no HTTP range/resume; if connection drops client restarts. Long request: reverse proxy (Caddy) must allow long read/write/idle timeouts; the API sets per-request write deadline for downloads and does not set a global `WriteTimeout`. Streams through VPS bandwidth; large shoots may take minutes. ZIP size/content length is not known in advance.
+
+## Waitlist
+
+### `POST /api/v1/waitlist` (public)
+
+Submit early-access waitlist entry. No auth. Rate limited per IP. Body limit 4KB.
+
+- **Request** `{name, contact, photographyType, shootsPerMonth, consent, website}`
+  - `contact` accepts email or Kenyan phone number; phone is normalized to `2547XXXXXXXX/2541XXXXXXXX`.
+  - `website` is honeypot; if filled, server returns success silently.
+  - `consent` must be `true`; server stores `consent_at` and `consent_version`.
+- **202 Accepted** - `{ "ok": true }` for new, duplicate, and honeypot submissions (no existence oracle)
+- **400 Bad Request** - `invalid_input` or `invalid_json`
+- **429 Too Many Requests** - `rate_limited`
+
+## Admin
+
+Admin auth is separate from photographer auth. Cookie: `pb_admin` (HttpOnly, SameSite=Strict, Secure configurable). Admin sessions store only token hash; pending sessions (password ok, 2FA incomplete) expire in 5 minutes and cannot access admin routes. Idle and absolute session expiry are enforced. If `ADMIN_ALLOWED_IPS` is set, non-allowed IPs receive 404.
+
+State-changing admin routes require `Content-Type: application/json` and `Origin` matching the app origin.
+
+### Admin auth
+
+- `POST /api/v1/admin/auth/login` `{email,password}` - generic `401 invalid_credentials`; 5 failures/15 min per IP and per email. Success: `{next:"totp"|"totp_setup"|"ok"}` and sets `pb_admin`.
+- `POST /api/v1/admin/auth/totp/setup/start` (pending session) - returns `{otpauthUri, secret}` once.
+- `POST /api/v1/admin/auth/totp/setup/confirm` `{code}` (pending session) - confirms TOTP, promotes session, returns `{recoveryCodes:[...]}` once.
+- `POST /api/v1/admin/auth/totp/verify` `{code}` or `{recoveryCode}` (pending session) - promotes session. Recovery codes are single-use.
+- `POST /api/v1/admin/auth/logout` - 204, clears admin cookie.
+- `GET /api/v1/admin/auth/me` - current admin metadata.
+- `POST /api/v1/admin/auth/password` `{current,new}` - requires current password, min 12 chars, ends other admin sessions; audited.
+
+### Admin platform
+
+All responses contain platform metadata/aggregates only; never clients, shoots, photos, delivery links, tokens, or notification contents. No impersonation.
+
+- `GET /api/v1/admin/overview` - platform stats, waitlist new count, pending invitations count.
+- `GET /api/v1/admin/waitlist?status=&q=&limit=&offset=`
+- `GET /api/v1/admin/waitlist/{id}`
+- `PATCH /api/v1/admin/waitlist/{id}` `{notes?,email?,phone?}`
+- `POST /api/v1/admin/waitlist/{id}/invite` `{email?,planId,days,send}` - phone-only entry requires email. Creates invitation, marks entry invited. Returns `{url,expiresAt,emailStatus}`; URL shown once.
+- `POST /api/v1/admin/waitlist/{id}/decline`
+- `POST /api/v1/admin/waitlist/{id}/spam`
+- `DELETE /api/v1/admin/waitlist/{id}` - hard delete (erasure); audited.
+- `GET /api/v1/admin/waitlist/export.csv` - CSV export; formula-injection neutralized; audited.
+- `GET /api/v1/admin/invitations?status=`
+- `POST /api/v1/admin/invitations` `{email,planId,days,note,send}` - returns `{url,expiresAt,emailStatus,invitation}`; URL shown once.
+- `POST /api/v1/admin/invitations/{id}/revoke`
+- `POST /api/v1/admin/invitations/{id}/resend` - revokes old invitation, creates new one, returns new URL once.
+- `GET /api/v1/admin/photographers?q=&status=&limit=&offset=` - includes plan/status/storage/usage counts.
+- `GET /api/v1/admin/photographers/{id}`
+- `POST /api/v1/admin/photographers/{id}/suspend` `{reason}` - suspends photographer, deletes their sessions, audited. Suspended photographers cannot log in; existing delivery links keep working until expiry.
+- `POST /api/v1/admin/photographers/{id}/unsuspend`
+- `PATCH /api/v1/admin/photographers/{id}/plan` `{planId}` - changing to smaller quota does not delete data.
+- `GET /api/v1/admin/audit?action=&limit=&offset=`
+
+Invitation emails: if `send=true` and sender configured, sent inline in same request with subject "Your Photobooth invitation", plain text+HTML, link, expiry date, and reason line. Raw URL never put in job/log/db. Limit 30 invitation emails/hour/admin. If no sender configured, `emailStatus` indicates manual sharing.
+

@@ -34,6 +34,7 @@ export function EarlyAccessForm() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function setField<K extends keyof WaitlistInput>(key: K, value: WaitlistInput[K]) {
     setInput((prev) => ({ ...prev, [key]: value }));
@@ -42,6 +43,7 @@ export function EarlyAccessForm() {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setSubmitError(null);
     const result = validateWaitlistInput(input);
     if (!result.ok) {
       if (result.silent) {
@@ -58,8 +60,12 @@ export function EarlyAccessForm() {
 
     setPending(true);
     try {
-      await waitlistApi.join(result.data);
-      setSubmitted(true);
+      const res = await waitlistApi.join(result.data);
+      if (res.ok) {
+        setSubmitted(true);
+        return;
+      }
+      setSubmitError(res.message);
     } finally {
       setPending(false);
     }
@@ -180,6 +186,12 @@ export function EarlyAccessForm() {
           </p>
         ) : null}
       </div>
+
+      {submitError ? (
+        <p className="text-sm text-destructive" role="status" aria-live="polite">
+          {submitError}
+        </p>
+      ) : null}
 
       <Button type="submit" disabled={pending} className="min-h-11 w-full sm:w-auto">
         {pending ? "Sending..." : "Get early access"}

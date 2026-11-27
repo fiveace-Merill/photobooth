@@ -16,3 +16,7 @@ This file tracks placeholder content that must be replaced before a public launc
 | Placeholder sender address `no-reply@photobooth.local` | `.env.example`, local email config | Real verified sending address/domain | Used as `MAIL_FROM_ADDRESS`; must be a domain controlled by Photobooth. Real inbox delivery/spam placement need real provider/domain. |
 | Placeholder sender name `Photobooth` | `.env.example`, email config | Final product sender name | Used in `"{Studio} via {MAIL_FROM_NAME}"` From header. |
 | Local Mailpit SMTP/UI | `docker-compose.yml`, `.env.example` | Real email provider (SMTP/API) and verified domain | Mailpit is for local testing only; open `http://localhost:8025`. |
+
+## Waitlist consent
+- Waitlist consent version: `2026-05-28-v1`
+- Text shown to user: "I agree to be contacted about Photobooth early access." (placeholder; legal copy to be reviewed before production launch)

@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/fiveace-Merill/photobooth/internal/auth/store"
@@ -14,20 +15,26 @@ import (
 // Handler exposes auth HTTP endpoints. It translates HTTP requests into service
 // calls and service results/errors into HTTP responses.
 type Handler struct {
-	svc           *Service
-	cookieSecure  bool
-	signupMode    string
-	inviteLimiter *ratelimit.Limiter
+	svc            *Service
+	cookieSecure   bool
+	signupMode     string
+	inviteLimiter  *ratelimit.Limiter
+	trustedProxies []netip.Prefix
 }
 
 // NewHandler creates an auth Handler.
 // cookieSecure should be true in production (HTTPS); config controls it.
-func NewHandler(svc *Service, cookieSecure bool, signupMode string) *Handler {
+func NewHandler(svc *Service, cookieSecure bool, signupMode string, trustedProxies ...[]netip.Prefix) *Handler {
+	var tp []netip.Prefix
+	if len(trustedProxies) > 0 {
+		tp = append([]netip.Prefix(nil), trustedProxies[0]...)
+	}
 	return &Handler{
-		svc:           svc,
-		cookieSecure:  cookieSecure,
-		signupMode:    signupMode,
-		inviteLimiter: ratelimit.New(20, time.Minute),
+		svc:            svc,
+		cookieSecure:   cookieSecure,
+		signupMode:     signupMode,
+		inviteLimiter:  ratelimit.New(20, time.Minute),
+		trustedProxies: tp,
 	}
 }
 
@@ -221,7 +228,7 @@ func (h *Handler) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) rateLimitInvitation(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := ratelimit.ClientIP(r)
+		ip := httpx.ClientIP(r, h.trustedProxies)
 		if !h.inviteLimiter.Allow(ip) {
 			setInvitePublicHeaders(w)
 			httpx.ErrorCode(w, http.StatusTooManyRequests, "rate_limited", "Too many requests")

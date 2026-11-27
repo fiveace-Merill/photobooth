@@ -70,3 +70,25 @@ sql:
         out: internal/notify/store
         sql_package: pgx/v5
         emit_json_tags: false
+
+  - name: admin
+    engine: postgresql
+    schema: migrations
+    queries: internal/admin/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/admin/store
+        sql_package: pgx/v5
+        emit_json_tags: false
+
+  - name: waitlist
+    engine: postgresql
+    schema: migrations
+    queries: internal/waitlist/queries.sql
+    gen:
+      go:
+        package: store
+        out: internal/waitlist/store
+        sql_package: pgx/v5
+        emit_json_tags: false
