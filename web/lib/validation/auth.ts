@@ -50,6 +50,8 @@ export function mapAuthError(err: AuthErrorLike): string {
       return "That studio slug is already taken.";
     case "signup_closed":
       return "signup_closed";
+    case "invite_invalid":
+      return "invite_invalid";
     case "invalid_input":
       return err.error || "Check the form and try again.";
     case "unauthorized":

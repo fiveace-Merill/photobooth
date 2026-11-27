@@ -35,8 +35,8 @@ func setup(t *testing.T) (*testdb.DB, api, api) {
 
 func newPhotographer(t *testing.T, tdb *testdb.DB, email, biz, slug string) api {
 	t.Helper()
-	authSvc := auth.NewService(authstore.New(tdb.App), true)
-	authH := auth.NewHandler(authSvc, false)
+	authSvc := auth.NewService(authstore.New(tdb.App), tdb.App, "open")
+	authH := auth.NewHandler(authSvc, false, "open")
 	mw := auth.NewMiddleware(authSvc, false)
 	clientsSvc := clients.NewService(tdb.App)
 	clientsH := clients.NewHandler(clientsSvc)

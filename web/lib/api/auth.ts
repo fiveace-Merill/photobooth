@@ -10,16 +10,25 @@ export type AuthApiError = {
 export type AuthApiOk<T> = { ok: true; data: T };
 export type AuthApiResult<T> = AuthApiOk<T> | AuthApiError;
 
+export type SignupMode = "closed" | "invite" | "open";
+
+export type AuthConfig = { signupMode: SignupMode };
+
+export type InvitationInfo = { email: string; expiresAt: string };
+
 export interface AuthApi {
   signup(input: {
     email: string;
     password: string;
     business_name: string;
     slug: string;
+    inviteToken?: string;
   }): Promise<AuthApiResult<Photographer>>;
   login(input: { email: string; password: string }): Promise<AuthApiResult<Photographer>>;
   logout(): Promise<void>;
   me(): Promise<AuthApiResult<Photographer>>;
+  config(): Promise<AuthApiResult<AuthConfig>>;
+  getInvitation(token: string): Promise<AuthApiResult<InvitationInfo>>;
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -72,6 +81,22 @@ export const authApi: AuthApi = {
   async me() {
     const res = await fetch("/api/v1/auth/me", { credentials: "same-origin" });
     if (res.ok) return { ok: true, data: await parseJson<Photographer>(res) };
+    return toError(res);
+  },
+  async config() {
+    const res = await fetch("/api/v1/auth/config", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (res.ok) return { ok: true, data: await parseJson<AuthConfig>(res) };
+    return toError(res);
+  },
+  async getInvitation(token: string) {
+    const res = await fetch(`/api/v1/auth/invitations/${encodeURIComponent(token)}`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (res.ok) return { ok: true, data: await parseJson<InvitationInfo>(res) };
     return toError(res);
   },
 };

@@ -11,6 +11,81 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeInvitation = `-- name: ConsumeInvitation :one
+UPDATE invitations
+SET used_at = now(), photographer_id = $2
+WHERE id = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+  AND expires_at > now()
+RETURNING id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+`
+
+type ConsumeInvitationParams struct {
+	ID             pgtype.UUID
+	PhotographerID pgtype.UUID
+}
+
+func (q *Queries) ConsumeInvitation(ctx context.Context, arg ConsumeInvitationParams) (Invitation, error) {
+	row := q.db.QueryRow(ctx, consumeInvitation, arg.ID, arg.PhotographerID)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.TokenHash,
+		&i.PlanID,
+		&i.Note,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UsedAt,
+		&i.PhotographerID,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO invitations (email, token_hash, plan_id, note, expires_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+`
+
+type CreateInvitationParams struct {
+	Email     string
+	TokenHash []byte
+	PlanID    string
+	Note      pgtype.Text
+	ExpiresAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.Email,
+		arg.TokenHash,
+		arg.PlanID,
+		arg.Note,
+		arg.ExpiresAt,
+		arg.CreatedBy,
+	)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.TokenHash,
+		&i.PlanID,
+		&i.Note,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UsedAt,
+		&i.PhotographerID,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const createPhotographer = `-- name: CreatePhotographer :one
 
 INSERT INTO photographers (email, password_hash, business_name, slug)
@@ -25,16 +100,83 @@ type CreatePhotographerParams struct {
 	Slug         string
 }
 
+type CreatePhotographerRow struct {
+	ID               pgtype.UUID
+	Email            string
+	PasswordHash     string
+	BusinessName     string
+	Slug             string
+	Phone            pgtype.Text
+	PlanID           string
+	StorageUsedBytes int64
+	Status           string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
 // Queries for the auth package. sqlc turns these into Go in internal/auth/store.
-// Sessions are auth-owned; they are not tenant-scoped via RLS like client data.
-func (q *Queries) CreatePhotographer(ctx context.Context, arg CreatePhotographerParams) (Photographer, error) {
+// Sessions/invitations are auth-owned; they are not tenant-scoped via RLS.
+func (q *Queries) CreatePhotographer(ctx context.Context, arg CreatePhotographerParams) (CreatePhotographerRow, error) {
 	row := q.db.QueryRow(ctx, createPhotographer,
 		arg.Email,
 		arg.PasswordHash,
 		arg.BusinessName,
 		arg.Slug,
 	)
-	var i Photographer
+	var i CreatePhotographerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.BusinessName,
+		&i.Slug,
+		&i.Phone,
+		&i.PlanID,
+		&i.StorageUsedBytes,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createPhotographerWithPlan = `-- name: CreatePhotographerWithPlan :one
+INSERT INTO photographers (email, password_hash, business_name, slug, plan_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, email, password_hash, business_name, slug, phone, plan_id, storage_used_bytes, status, created_at, updated_at
+`
+
+type CreatePhotographerWithPlanParams struct {
+	Email        string
+	PasswordHash string
+	BusinessName string
+	Slug         string
+	PlanID       string
+}
+
+type CreatePhotographerWithPlanRow struct {
+	ID               pgtype.UUID
+	Email            string
+	PasswordHash     string
+	BusinessName     string
+	Slug             string
+	Phone            pgtype.Text
+	PlanID           string
+	StorageUsedBytes int64
+	Status           string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) CreatePhotographerWithPlan(ctx context.Context, arg CreatePhotographerWithPlanParams) (CreatePhotographerWithPlanRow, error) {
+	row := q.db.QueryRow(ctx, createPhotographerWithPlan,
+		arg.Email,
+		arg.PasswordHash,
+		arg.BusinessName,
+		arg.Slug,
+		arg.PlanID,
+	)
+	var i CreatePhotographerWithPlanRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
@@ -84,15 +226,79 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	return err
 }
 
+const getInvitationByID = `-- name: GetInvitationByID :one
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE id = $1
+`
+
+func (q *Queries) GetInvitationByID(ctx context.Context, id pgtype.UUID) (Invitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByID, id)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.TokenHash,
+		&i.PlanID,
+		&i.Note,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UsedAt,
+		&i.PhotographerID,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getInvitationByTokenHash = `-- name: GetInvitationByTokenHash :one
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE token_hash = $1
+`
+
+func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash []byte) (Invitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByTokenHash, tokenHash)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.TokenHash,
+		&i.PlanID,
+		&i.Note,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UsedAt,
+		&i.PhotographerID,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const getPhotographerByEmail = `-- name: GetPhotographerByEmail :one
 SELECT id, email, password_hash, business_name, slug, phone, plan_id, storage_used_bytes, status, created_at, updated_at
 FROM photographers
 WHERE email = $1
 `
 
-func (q *Queries) GetPhotographerByEmail(ctx context.Context, email string) (Photographer, error) {
+type GetPhotographerByEmailRow struct {
+	ID               pgtype.UUID
+	Email            string
+	PasswordHash     string
+	BusinessName     string
+	Slug             string
+	Phone            pgtype.Text
+	PlanID           string
+	StorageUsedBytes int64
+	Status           string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetPhotographerByEmail(ctx context.Context, email string) (GetPhotographerByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getPhotographerByEmail, email)
-	var i Photographer
+	var i GetPhotographerByEmailRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
@@ -118,9 +324,23 @@ WHERE s.token_hash = $1
   AND p.status = 'active'
 `
 
-func (q *Queries) GetPhotographerBySessionTokenHash(ctx context.Context, tokenHash []byte) (Photographer, error) {
+type GetPhotographerBySessionTokenHashRow struct {
+	ID               pgtype.UUID
+	Email            string
+	PasswordHash     string
+	BusinessName     string
+	Slug             string
+	Phone            pgtype.Text
+	PlanID           string
+	StorageUsedBytes int64
+	Status           string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetPhotographerBySessionTokenHash(ctx context.Context, tokenHash []byte) (GetPhotographerBySessionTokenHashRow, error) {
 	row := q.db.QueryRow(ctx, getPhotographerBySessionTokenHash, tokenHash)
-	var i Photographer
+	var i GetPhotographerBySessionTokenHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
@@ -135,4 +355,173 @@ func (q *Queries) GetPhotographerBySessionTokenHash(ctx context.Context, tokenHa
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listInvitations = `-- name: ListInvitations :many
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE (
+    CASE
+        WHEN $1::text IS NULL OR $1::text = '' THEN TRUE
+        WHEN $1::text = 'pending' THEN used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+        WHEN $1::text = 'used' THEN used_at IS NOT NULL
+        WHEN $1::text = 'revoked' THEN revoked_at IS NOT NULL
+        WHEN $1::text = 'expired' THEN used_at IS NULL AND revoked_at IS NULL AND expires_at <= now()
+        ELSE FALSE
+    END
+)
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListInvitations(ctx context.Context, status pgtype.Text) ([]Invitation, error) {
+	rows, err := q.db.Query(ctx, listInvitations, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Invitation
+	for rows.Next() {
+		var i Invitation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.TokenHash,
+			&i.PlanID,
+			&i.Note,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.CreatedBy,
+			&i.UsedAt,
+			&i.PhotographerID,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockActiveInvitationsByEmail = `-- name: LockActiveInvitationsByEmail :many
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE email = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+FOR UPDATE
+`
+
+func (q *Queries) LockActiveInvitationsByEmail(ctx context.Context, email string) ([]Invitation, error) {
+	rows, err := q.db.Query(ctx, lockActiveInvitationsByEmail, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Invitation
+	for rows.Next() {
+		var i Invitation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.TokenHash,
+			&i.PlanID,
+			&i.Note,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.CreatedBy,
+			&i.UsedAt,
+			&i.PhotographerID,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockInvitationByTokenHash = `-- name: LockInvitationByTokenHash :one
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE token_hash = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockInvitationByTokenHash(ctx context.Context, tokenHash []byte) (Invitation, error) {
+	row := q.db.QueryRow(ctx, lockInvitationByTokenHash, tokenHash)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.TokenHash,
+		&i.PlanID,
+		&i.Note,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UsedAt,
+		&i.PhotographerID,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const revokeExpiredActiveInvitationsByEmail = `-- name: RevokeExpiredActiveInvitationsByEmail :exec
+UPDATE invitations
+SET revoked_at = now()
+WHERE email = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+  AND expires_at <= now()
+`
+
+func (q *Queries) RevokeExpiredActiveInvitationsByEmail(ctx context.Context, email string) error {
+	_, err := q.db.Exec(ctx, revokeExpiredActiveInvitationsByEmail, email)
+	return err
+}
+
+const revokeInvitation = `-- name: RevokeInvitation :one
+UPDATE invitations
+SET revoked_at = now()
+WHERE id = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+RETURNING id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+`
+
+func (q *Queries) RevokeInvitation(ctx context.Context, id pgtype.UUID) (Invitation, error) {
+	row := q.db.QueryRow(ctx, revokeInvitation, id)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.TokenHash,
+		&i.PlanID,
+		&i.Note,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UsedAt,
+		&i.PhotographerID,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const updatePhotographerLastLoginAt = `-- name: UpdatePhotographerLastLoginAt :exec
+UPDATE photographers
+SET last_login_at = now()
+WHERE id = $1
+  AND (last_login_at IS NULL OR last_login_at < now() - interval '1 minute')
+`
+
+func (q *Queries) UpdatePhotographerLastLoginAt(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, updatePhotographerLastLoginAt, id)
+	return err
 }

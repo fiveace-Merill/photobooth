@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Repeatable kill-recovery test for process_photo.
-# Requires: db up, migrations applied, R2 configured, SIGNUP_ENABLED=true.
+# Requires: db up, migrations applied, R2 configured, SIGNUP_MODE=open.
 # Usage: make photo-kill-test
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -11,7 +11,7 @@ set -a; . ./.env; set +a
 
 export APP_ENV=${APP_ENV:-development}
 export STORAGE_DRIVER=${STORAGE_DRIVER:-r2}
-export SIGNUP_ENABLED=true
+export SIGNUP_MODE=open
 export PHOTO_TEST_DELAY=${PHOTO_TEST_DELAY:-90s}
 export RIVER_MAX_WORKERS=${RIVER_MAX_WORKERS:-1}
 PORT=${PORT:-8080}

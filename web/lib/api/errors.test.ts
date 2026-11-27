@@ -15,6 +15,7 @@ describe("messageForApiCode", () => {
     expect(messageForApiCode("invalid_content_type")).toMatch(/request/i);
     expect(messageForApiCode("invalid_origin")).toMatch(/request/i);
     expect(messageForApiCode("signup_closed")).toMatch(/invite/i);
+    expect(messageForApiCode("invite_invalid")).toMatch(/invitation/i);
     expect(messageForApiCode("internal")).toMatch(/wrong/i);
   });
 

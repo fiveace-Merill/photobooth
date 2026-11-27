@@ -72,8 +72,8 @@ func setupEmailEnv(t *testing.T, sender notify.EmailSender) emailEnv {
 	fakeStore := photostorage.NewFake()
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	authSvc := auth.NewService(authstore.New(tdb.App), true)
-	authH := auth.NewHandler(authSvc, false)
+	authSvc := auth.NewService(authstore.New(tdb.App), tdb.App, "open")
+	authH := auth.NewHandler(authSvc, false, "open")
 	authMw := auth.NewMiddleware(authSvc, false)
 	clientsSvc := clients.NewService(tdb.App)
 	clientsH := clients.NewHandler(clientsSvc)

@@ -49,6 +49,9 @@ describe("mapAuthError", () => {
     expect(mapAuthError({ code: "signup_closed", status: 403 })).toBe(
       "signup_closed",
     );
+    expect(mapAuthError({ code: "invite_invalid", status: 404 })).toBe(
+      "invite_invalid",
+    );
   });
 
   it("falls back safely for unknown errors", () => {

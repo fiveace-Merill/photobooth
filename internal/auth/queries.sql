@@ -1,9 +1,14 @@
 -- Queries for the auth package. sqlc turns these into Go in internal/auth/store.
--- Sessions are auth-owned; they are not tenant-scoped via RLS like client data.
+-- Sessions/invitations are auth-owned; they are not tenant-scoped via RLS.
 
 -- name: CreatePhotographer :one
 INSERT INTO photographers (email, password_hash, business_name, slug)
 VALUES ($1, $2, $3, $4)
+RETURNING id, email, password_hash, business_name, slug, phone, plan_id, storage_used_bytes, status, created_at, updated_at;
+
+-- name: CreatePhotographerWithPlan :one
+INSERT INTO photographers (email, password_hash, business_name, slug, plan_id)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, email, password_hash, business_name, slug, phone, plan_id, storage_used_bytes, status, created_at, updated_at;
 
 -- name: GetPhotographerByEmail :one
@@ -26,3 +31,78 @@ WHERE s.token_hash = $1
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1;
+
+-- name: UpdatePhotographerLastLoginAt :exec
+UPDATE photographers
+SET last_login_at = now()
+WHERE id = $1
+  AND (last_login_at IS NULL OR last_login_at < now() - interval '1 minute');
+
+-- name: CreateInvitation :one
+INSERT INTO invitations (email, token_hash, plan_id, note, expires_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at;
+
+-- name: GetInvitationByID :one
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE id = $1;
+
+-- name: GetInvitationByTokenHash :one
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE token_hash = $1;
+
+-- name: LockInvitationByTokenHash :one
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE token_hash = $1
+FOR UPDATE;
+
+-- name: ConsumeInvitation :one
+UPDATE invitations
+SET used_at = now(), photographer_id = $2
+WHERE id = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+  AND expires_at > now()
+RETURNING id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at;
+
+-- name: RevokeInvitation :one
+UPDATE invitations
+SET revoked_at = now()
+WHERE id = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+RETURNING id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at;
+
+-- name: RevokeExpiredActiveInvitationsByEmail :exec
+UPDATE invitations
+SET revoked_at = now()
+WHERE email = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+  AND expires_at <= now();
+
+-- name: LockActiveInvitationsByEmail :many
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE email = $1
+  AND used_at IS NULL
+  AND revoked_at IS NULL
+FOR UPDATE;
+
+-- name: ListInvitations :many
+SELECT id, email, token_hash, plan_id, note, expires_at, created_at, created_by, used_at, photographer_id, revoked_at
+FROM invitations
+WHERE (
+    CASE
+        WHEN sqlc.narg('status')::text IS NULL OR sqlc.narg('status')::text = '' THEN TRUE
+        WHEN sqlc.narg('status')::text = 'pending' THEN used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+        WHEN sqlc.narg('status')::text = 'used' THEN used_at IS NOT NULL
+        WHEN sqlc.narg('status')::text = 'revoked' THEN revoked_at IS NOT NULL
+        WHEN sqlc.narg('status')::text = 'expired' THEN used_at IS NULL AND revoked_at IS NULL AND expires_at <= now()
+        ELSE FALSE
+    END
+)
+ORDER BY created_at DESC, id DESC;

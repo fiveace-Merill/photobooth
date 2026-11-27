@@ -8,6 +8,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Admin struct {
+	ID              pgtype.UUID
+	Email           string
+	PasswordHash    string
+	TotpSecretEnc   []byte
+	TotpConfirmedAt pgtype.Timestamptz
+	Status          string
+	LastLoginAt     pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+}
+
+type AdminAuditLog struct {
+	ID         pgtype.UUID
+	AdminID    pgtype.UUID
+	Actor      string
+	Action     string
+	TargetType string
+	TargetID   pgtype.Text
+	Meta       []byte
+	Ip         pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+}
+
+type AdminRecoveryCode struct {
+	ID        pgtype.UUID
+	AdminID   pgtype.UUID
+	CodeHash  []byte
+	UsedAt    pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+type AdminSession struct {
+	TokenHash  []byte
+	AdminID    pgtype.UUID
+	Pending    bool
+	CreatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
+	ExpiresAt  pgtype.Timestamptz
+}
+
 type Client struct {
 	ID             pgtype.UUID
 	PhotographerID pgtype.UUID
@@ -29,6 +69,20 @@ type GalleryLink struct {
 	RevokedAt      pgtype.Timestamptz
 	LastViewedAt   pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
+}
+
+type Invitation struct {
+	ID             pgtype.UUID
+	Email          string
+	TokenHash      []byte
+	PlanID         string
+	Note           pgtype.Text
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	CreatedBy      pgtype.UUID
+	UsedAt         pgtype.Timestamptz
+	PhotographerID pgtype.UUID
+	RevokedAt      pgtype.Timestamptz
 }
 
 type LedgerEntry struct {
@@ -131,6 +185,9 @@ type Photographer struct {
 	Status           string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	LastLoginAt      pgtype.Timestamptz
+	SuspendedAt      pgtype.Timestamptz
+	SuspendedReason  pgtype.Text
 }
 
 type Plan struct {
@@ -174,4 +231,21 @@ type ShootEvent struct {
 	Kind           string
 	Payload        []byte
 	CreatedAt      pgtype.Timestamptz
+}
+
+type WaitlistEntry struct {
+	ID              pgtype.UUID
+	Name            string
+	ContactEmail    pgtype.Text
+	ContactPhone    pgtype.Text
+	PhotographyType string
+	ShootsPerMonth  string
+	ConsentAt       pgtype.Timestamptz
+	ConsentVersion  string
+	Status          string
+	InvitationID    pgtype.UUID
+	InvitedAt       pgtype.Timestamptz
+	Notes           pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }

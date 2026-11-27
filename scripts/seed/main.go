@@ -37,7 +37,7 @@ func main() {
 	biz := envDefault("SEED_PHOTOGRAPHER_BUSINESS_NAME", "Demo Studio")
 	slug := envDefault("SEED_PHOTOGRAPHER_SLUG", "demo-studio")
 
-	authSvc := auth.NewService(authstore.New(pool), true)
+	authSvc := auth.NewService(authstore.New(pool), pool, "open")
 	photog, _, err := authSvc.Signup(ctx, auth.SignupInput{Email: email, Password: password, BusinessName: biz, Slug: slug})
 	if err != nil {
 		p, _, lerr := authSvc.Login(ctx, email, password)

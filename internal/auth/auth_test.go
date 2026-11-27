@@ -15,8 +15,8 @@ import (
 
 func TestSignupLoginLogout(t *testing.T) {
 	tdb := testdb.Open(t)
-	svc := auth.NewService(store.New(tdb.Owner), true)
-	h := auth.NewHandler(svc, false)
+	svc := auth.NewService(store.New(tdb.Owner), tdb.Owner, "open")
+	h := auth.NewHandler(svc, false, "open")
 
 	mux := http.NewServeMux()
 	h.Register(mux, auth.NewMiddleware(svc, false))
@@ -102,8 +102,8 @@ func TestSignupLoginLogout(t *testing.T) {
 
 func TestMe(t *testing.T) {
 	tdb := testdb.Open(t)
-	svc := auth.NewService(store.New(tdb.Owner), true)
-	h := auth.NewHandler(svc, false)
+	svc := auth.NewService(store.New(tdb.Owner), tdb.Owner, "open")
+	h := auth.NewHandler(svc, false, "open")
 
 	mux := http.NewServeMux()
 	mw := auth.NewMiddleware(svc, false)
@@ -182,8 +182,8 @@ func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
 
 func TestSignupClosed(t *testing.T) {
 	tdb := testdb.Open(t)
-	svc := auth.NewService(store.New(tdb.Owner), false)
-	h := auth.NewHandler(svc, false)
+	svc := auth.NewService(store.New(tdb.Owner), tdb.Owner, "closed")
+	h := auth.NewHandler(svc, false, "closed")
 	mux := http.NewServeMux()
 	h.Register(mux, auth.NewMiddleware(svc, false))
 
@@ -207,8 +207,8 @@ func TestSignupClosed(t *testing.T) {
 
 func TestCookieSecureFlag(t *testing.T) {
 	tdb := testdb.Open(t)
-	svc := auth.NewService(store.New(tdb.Owner), true)
-	h := auth.NewHandler(svc, true)
+	svc := auth.NewService(store.New(tdb.Owner), tdb.Owner, "open")
+	h := auth.NewHandler(svc, true, "open")
 	mux := http.NewServeMux()
 	h.Register(mux, auth.NewMiddleware(svc, true))
 
@@ -237,8 +237,8 @@ func TestCookieSecureFlag(t *testing.T) {
 
 func TestCSRFMiddleware(t *testing.T) {
 	tdb := testdb.Open(t)
-	svc := auth.NewService(store.New(tdb.Owner), true)
-	h := auth.NewHandler(svc, false)
+	svc := auth.NewService(store.New(tdb.Owner), tdb.Owner, "open")
+	h := auth.NewHandler(svc, false, "open")
 	mux := http.NewServeMux()
 	h.Register(mux, auth.NewMiddleware(svc, false))
 

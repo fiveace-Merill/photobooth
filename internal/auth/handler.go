@@ -7,20 +7,28 @@ import (
 
 	"github.com/fiveace-Merill/photobooth/internal/auth/store"
 	"github.com/fiveace-Merill/photobooth/internal/platform/httpx"
+	"github.com/fiveace-Merill/photobooth/internal/platform/ratelimit"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Handler exposes auth HTTP endpoints. It translates HTTP requests into service
 // calls and service results/errors into HTTP responses.
 type Handler struct {
-	svc          *Service
-	cookieSecure bool
+	svc           *Service
+	cookieSecure  bool
+	signupMode    string
+	inviteLimiter *ratelimit.Limiter
 }
 
 // NewHandler creates an auth Handler.
 // cookieSecure should be true in production (HTTPS); config controls it.
-func NewHandler(svc *Service, cookieSecure bool) *Handler {
-	return &Handler{svc: svc, cookieSecure: cookieSecure}
+func NewHandler(svc *Service, cookieSecure bool, signupMode string) *Handler {
+	return &Handler{
+		svc:           svc,
+		cookieSecure:  cookieSecure,
+		signupMode:    signupMode,
+		inviteLimiter: ratelimit.New(20, time.Minute),
+	}
 }
 
 // Register mounts auth routes on mux. Routes are rooted at /api/v1/auth.
@@ -32,6 +40,8 @@ func (h *Handler) Register(mux *http.ServeMux, _ func(http.Handler) http.Handler
 	mux.Handle("POST /api/v1/auth/login", RequireSameOriginJSON(http.HandlerFunc(h.handleLogin)))
 	mux.Handle("POST /api/v1/auth/logout", RequireSameOriginJSON(http.HandlerFunc(h.handleLogout)))
 	mux.Handle("GET /api/v1/auth/me", RequireAuth(http.HandlerFunc(h.handleMe)))
+	mux.HandleFunc("GET /api/v1/auth/config", h.handleConfig)
+	mux.HandleFunc("GET /api/v1/auth/invitations/{token}", h.rateLimitInvitation(h.handleGetInvitation))
 }
 
 type signupRequest struct {
@@ -39,6 +49,7 @@ type signupRequest struct {
 	Password     string `json:"password"`
 	BusinessName string `json:"business_name"`
 	Slug         string `json:"slug"`
+	InviteToken  string `json:"inviteToken"`
 }
 
 type authResponse struct {
@@ -61,11 +72,14 @@ func (h *Handler) handleSignup(w http.ResponseWriter, r *http.Request) {
 		Password:     req.Password,
 		BusinessName: req.BusinessName,
 		Slug:         req.Slug,
+		InviteToken:  req.InviteToken,
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrSignupClosed):
 			httpx.ErrorCode(w, http.StatusForbidden, "signup_closed", "Signups are invite-only right now.")
+		case errors.Is(err, ErrInviteInvalid):
+			writeInviteInvalid(w)
 		case errors.Is(err, ErrInvalidInput):
 			httpx.ErrorCode(w, http.StatusBadRequest, "invalid_input", err.Error())
 		case errors.Is(err, ErrEmailTaken):
@@ -187,4 +201,45 @@ func fmtUUID(b [16]byte) string {
 		pos += 2
 	}
 	return string(out)
+}
+
+func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"signupMode": h.signupMode})
+}
+
+func (h *Handler) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
+	setInvitePublicHeaders(w)
+	token := r.PathValue("token")
+	inv, err := h.svc.ValidateInvitationToken(r.Context(), token)
+	if err != nil {
+		writeInviteInvalid(w)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, inv)
+}
+
+func (h *Handler) rateLimitInvitation(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := ratelimit.ClientIP(r)
+		if !h.inviteLimiter.Allow(ip) {
+			setInvitePublicHeaders(w)
+			httpx.ErrorCode(w, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+			return
+		}
+		next(w, r)
+	}
+}
+
+// SetInviteLimiter overrides the invitation endpoint rate limiter (used in tests).
+func (h *Handler) SetInviteLimiter(l *ratelimit.Limiter) { h.inviteLimiter = l }
+
+func setInvitePublicHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+}
+
+func writeInviteInvalid(w http.ResponseWriter) {
+	setInvitePublicHeaders(w)
+	httpx.ErrorCode(w, http.StatusNotFound, "invite_invalid", "Invitation not found")
 }

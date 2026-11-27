@@ -7,6 +7,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Photobooth",
   robots: { index: false, follow: false },
+  referrer: "no-referrer",
 };
 
 export default function AuthRootLayout({

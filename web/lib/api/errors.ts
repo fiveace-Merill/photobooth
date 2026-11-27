@@ -22,6 +22,7 @@ const messages: Record<string, string> = {
   invalid_content_type: "The request could not be sent. Please try again.",
   invalid_origin: "The request could not be sent. Please try again.",
   signup_closed: "Signups are invite-only right now.",
+  invite_invalid: "This invitation isn't valid or has expired.",
   unsupported_type: "This file type isn't supported. Use JPEG, PNG, or WebP.",
   file_too_large: "This file is too large to upload.",
   quota_exceeded: "This upload would exceed your storage quota.",
