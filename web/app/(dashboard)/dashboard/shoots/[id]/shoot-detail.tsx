@@ -12,6 +12,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { OverdueLabel } from "@/components/dashboard/overdue-label";
 import { deleteShoot, setShootStatus, updateShoot, type Shoot } from "@/lib/api/shoots";
+import { ShootPhotosPanel } from "@/components/dashboard/photos/shoot-photos-panel";
+import { ShootDeliveryPanel } from "@/components/dashboard/shoots/shoot-delivery-panel";
 import type { Client } from "@/lib/api/clients";
 import { messageForApiError } from "@/lib/api/errors";
 import { formatKesInput, formatMoney, parseKesToMinor } from "@/lib/money";
@@ -90,23 +92,28 @@ export function ShootDetail({ shoot, client }: { shoot: Shoot; client: Client | 
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Edit shoot</CardTitle></CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={onSave}>
-              <div className="space-y-2"><Label htmlFor="title">Title</Label><Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="min-h-11" /></div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2"><Label htmlFor="shootDate">Shoot date</Label><Input id="shootDate" type="date" value={shootDate} onChange={(e) => setShootDate(e.target.value)} className="min-h-11" /></div>
-                <div className="space-y-2"><Label htmlFor="dueDate">Due date</Label><Input id="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="min-h-11" /></div>
-              </div>
-              <div className="space-y-2"><Label htmlFor="price">Price (KES)</Label><Input id="price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} className="min-h-11" /><p className="text-xs text-muted-foreground">Enter whole KES, for example 3,000. Use 0 for free delivery.</p></div>
-              {error ? <p className="text-sm text-destructive" role="status">{error}</p> : null}
-              <Button type="submit" className="min-h-11" disabled={saving || !dirty}>{saving ? "Saving..." : "Save changes"}</Button>
-            </form>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Edit shoot</CardTitle></CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={onSave}>
+                <div className="space-y-2"><Label htmlFor="title">Title</Label><Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="min-h-11" /></div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2"><Label htmlFor="shootDate">Shoot date</Label><Input id="shootDate" type="date" value={shootDate} onChange={(e) => setShootDate(e.target.value)} className="min-h-11" /></div>
+                  <div className="space-y-2"><Label htmlFor="dueDate">Due date</Label><Input id="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="min-h-11" /></div>
+                </div>
+                <div className="space-y-2"><Label htmlFor="price">Price (KES)</Label><Input id="price" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} className="min-h-11" /><p className="text-xs text-muted-foreground">Enter whole KES, for example 3,000. Use 0 for free delivery.</p></div>
+                {error ? <p className="text-sm text-destructive" role="status">{error}</p> : null}
+                <Button type="submit" className="min-h-11" disabled={saving || !dirty}>{saving ? "Saving..." : "Save changes"}</Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <ShootPhotosPanel shootId={shoot.id} shootExpired={shoot.status === "expired"} />
+        </div>
 
         <div className="space-y-6">
+          <ShootDeliveryPanel shootId={shoot.id} shootStatus={shoot.status} priceMinor={shoot.priceMinor} />
           <Card>
             <CardHeader><CardTitle className="text-base">Client</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -115,11 +122,6 @@ export function ShootDetail({ shoot, client }: { shoot: Shoot; client: Client | 
               {client?.email ? <p className="text-muted-foreground">{client.email}</p> : null}
               <Link href={`/dashboard/clients/${shoot.clientId}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4">View client</Link>
             </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="text-base">Delivery</CardTitle></CardHeader>
-            <CardContent><p className="text-sm text-muted-foreground">Photo upload and delivery arrive in the next release.</p></CardContent>
           </Card>
 
           <Card>
